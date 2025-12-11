@@ -1,0 +1,69 @@
+{
+  "name": "@3viky/stream-workflow-status",
+  "version": "0.1.0",
+  "description": "Real-time stream status tracking and dashboard MCP server",
+  "type": "module",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "files": [
+    "dist",
+    "dashboard/dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:dashboard": "cd dashboard && pnpm build",
+    "build:all": "pnpm build && pnpm build:dashboard",
+    "dev": "tsc --watch",
+    "dev:api": "node --watch dist/api/server.js",
+    "dev:dashboard": "cd dashboard && pnpm dev",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "test:coverage": "vitest --coverage",
+    "lint": "eslint src/**/*.ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist dashboard/dist",
+    "prepublishOnly": "pnpm run build:all"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "stream-status",
+    "dashboard",
+    "sqlite",
+    "real-time"
+  ],
+  "author": "Victoria Lackey <VictoriaLackey@pm.me>",
+  "license": "MIT",
+  "dependencies": {
+    "@3viky/mcp-common": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "better-sqlite3": "^11.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "simple-git": "^3.27.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.1",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "eslint": "^9.15.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.5",
+    "@vitest/coverage-v8": "^2.1.5"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/3viky/stream-workflow-status.git"
+  }
+}
