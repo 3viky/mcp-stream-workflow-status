@@ -105,15 +105,40 @@ export function getStreamById(db: Database.Database, streamId: string): Stream |
 }
 
 /**
- * Get all streams
+ * Get all streams with optional filters
  */
-export function getAllStreams(db: Database.Database): Stream[] {
-  const stmt = db.prepare(`
-    SELECT * FROM streams ORDER BY updated_at DESC
-  `);
+export function getAllStreams(
+  db: Database.Database,
+  filters?: {
+    status?: string;
+    category?: string;
+  }
+): Stream[] {
+  let query = `SELECT * FROM streams WHERE 1=1`;
+  const params: any[] = [];
 
-  const rows = stmt.all() as any[];
+  if (filters?.status) {
+    query += ` AND status = ?`;
+    params.push(filters.status);
+  }
+
+  if (filters?.category) {
+    query += ` AND category = ?`;
+    params.push(filters.category);
+  }
+
+  query += ` ORDER BY updated_at DESC`;
+
+  const stmt = db.prepare(query);
+  const rows = stmt.all(...params) as any[];
   return rows.map(rowToStream);
+}
+
+/**
+ * Get stream by ID (alias for getStreamById)
+ */
+export function getStream(db: Database.Database, streamId: string): Stream | undefined {
+  return getStreamById(db, streamId);
 }
 
 /**

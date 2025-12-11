@@ -51,6 +51,30 @@ export function getAllCommits(db: Database.Database): Commit[] {
 }
 
 /**
+ * Get recent commits with limit
+ */
+export function getRecentCommits(db: Database.Database, limit: number = 20): Commit[] {
+  const stmt = db.prepare(`
+    SELECT * FROM commits ORDER BY timestamp DESC LIMIT ?
+  `);
+
+  const rows = stmt.all(limit) as any[];
+  return rows.map(rowToCommit);
+}
+
+/**
+ * Get commits for a specific stream with limit
+ */
+export function getStreamCommits(db: Database.Database, streamId: string, limit: number = 20): Commit[] {
+  const stmt = db.prepare(`
+    SELECT * FROM commits WHERE stream_id = ? ORDER BY timestamp DESC LIMIT ?
+  `);
+
+  const rows = stmt.all(streamId, limit) as any[];
+  return rows.map(rowToCommit);
+}
+
+/**
  * Get commits count for a stream
  */
 export function getCommitsCountByStream(db: Database.Database, streamId: string): number {

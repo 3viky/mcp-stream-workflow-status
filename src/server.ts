@@ -194,6 +194,13 @@ async function main() {
   console.error('Stream Workflow Status MCP server running on stdio');
 }
 
+// Import and start API server if enabled
+import { startApiServer } from './api/server.js';
+
+if (config.API_ENABLED) {
+  startApiServer();
+}
+
 main().catch((error) => {
   console.error('Fatal error:', error);
   process.exit(1);
