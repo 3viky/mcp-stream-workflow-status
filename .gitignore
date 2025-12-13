@@ -9,7 +9,9 @@ dashboard/dist/
 dashboard/node_modules/
 
 # SQLite databases (never commit)
-data/
+# IMPORTANT: Use /data/ (with leading slash) to only ignore root-level data directory
+# DO NOT use data/ (without slash) as it ignores ALL data directories including source code!
+/data/
 *.db
 *.db-journal
 *.db-shm
