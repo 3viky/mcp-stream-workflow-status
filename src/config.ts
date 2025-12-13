@@ -6,7 +6,7 @@
  */
 
 import { join, basename } from 'node:path';
-import { getMCPServiceSubdir } from '@3viky/mcp-common';
+import { getMCPServiceDataDir } from '@3viky/mcp-common';
 import type { Config } from './types.js';
 
 // Determine project root and name
@@ -14,8 +14,8 @@ const projectRoot = process.env.PROJECT_ROOT || process.cwd();
 const projectName = basename(projectRoot);
 
 // Get centralized storage directory for this project
-const projectStorageDir = getMCPServiceSubdir(
-  'stream-workflow-status',
+const projectStorageDir = join(
+  getMCPServiceDataDir('stream-workflow-status'),
   'projects',
   projectName
 );
