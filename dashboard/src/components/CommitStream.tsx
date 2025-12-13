@@ -5,13 +5,12 @@
  */
 
 import styled from 'styled-components';
-import { Card, Heading } from '@transftw/lilith-ui';
+import { Card, Heading } from './ui';
 import { GitCommit } from 'lucide-react';
 import type { Commit } from '../types';
 
 const CommitContainer = styled(Card)`
-  margin-bottom: ${props => props.theme.spacing.lg};
-  padding: ${props => props.theme.spacing.lg};
+  padding: ${props => props.theme.spacing.md};
 `;
 
 const CommitHeader = styled.div`
@@ -24,14 +23,36 @@ const CommitHeader = styled.div`
 const CommitList = styled.div`
   display: flex;
   flex-direction: column;
-  gap: ${props => props.theme.spacing.md};
+  gap: ${props => props.theme.spacing.sm};
+  max-height: 400px;
+  overflow-y: auto;
+  padding-right: ${props => props.theme.spacing.xs};
+
+  /* Custom scrollbar styling */
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: ${props => props.theme.colors.background.secondary};
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: ${props => props.theme.colors.border};
+    border-radius: 3px;
+
+    &:hover {
+      background: ${props => props.theme.colors.primary};
+    }
+  }
 `;
 
 const CommitItem = styled.div`
   display: flex;
-  gap: ${props => props.theme.spacing.md};
-  padding: ${props => props.theme.spacing.md};
-  background: ${props => props.theme.colors.surfaceHover};
+  gap: ${props => props.theme.spacing.sm};
+  padding: ${props => props.theme.spacing.sm};
+  background: ${props => props.theme.colors.hover.surface};
   border-radius: ${props => props.theme.borderRadius.sm};
   border-left: 3px solid ${props => props.theme.colors.primary};
 `;
@@ -68,12 +89,12 @@ const StreamNumber = styled.span`
 
 const CommitMessage = styled.span`
   font-weight: 500;
-  color: ${props => props.theme.colors.text};
+  color: ${props => props.theme.colors.text.primary};
 `;
 
 const CommitMeta = styled.div`
   font-size: 0.875rem;
-  color: ${props => props.theme.colors.textSecondary};
+  color: ${props => props.theme.colors.text.secondary};
   padding-left: ${props => props.theme.spacing.md};
   border-left: 2px solid ${props => props.theme.colors.border};
   margin-top: ${props => props.theme.spacing.xs};
@@ -82,15 +103,16 @@ const CommitMeta = styled.div`
 const NoCommits = styled.div`
   padding: ${props => props.theme.spacing.xl};
   text-align: center;
-  color: ${props => props.theme.colors.textSecondary};
+  color: ${props => props.theme.colors.text.secondary};
 `;
 
 interface CommitStreamProps {
   commits: Commit[];
   limit?: number;
+  loading?: boolean;
 }
 
-export function CommitStream({ commits, limit = 20 }: CommitStreamProps) {
+export function CommitStream({ commits, limit = 20, loading = false }: CommitStreamProps) {
   const displayCommits = commits.slice(0, limit);
 
   const formatTimestamp = (timestamp: string) => {
@@ -110,10 +132,12 @@ export function CommitStream({ commits, limit = 20 }: CommitStreamProps) {
     <CommitContainer>
       <CommitHeader>
         <GitCommit size={20} />
-        <Heading level={3}>Recent Commits</Heading>
+        <Heading as="h3">Recent Commits</Heading>
       </CommitHeader>
 
-      {displayCommits.length === 0 ? (
+      {loading && displayCommits.length === 0 ? (
+        <NoCommits>Loading commits...</NoCommits>
+      ) : displayCommits.length === 0 ? (
         <NoCommits>No recent commits</NoCommits>
       ) : (
         <CommitList>

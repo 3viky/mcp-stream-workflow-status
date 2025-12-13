@@ -21,6 +21,8 @@ import { addCommitTool } from './tools/add-commit.js';
 import { removeStreamTool } from './tools/remove-stream.js';
 import { getStreamStatsTool } from './tools/get-stream-stats.js';
 import { getVersionTool } from './tools/get-version.js';
+import { syncFromFilesTool } from './tools/sync-from-files.js';
+import { scanCommitsTool } from './scanners/git-commits.js';
 
 // Validate configuration
 validateConfig();
@@ -28,10 +30,17 @@ validateConfig();
 // Initialize database
 initializeDatabase(config.DATABASE_PATH);
 
+// Import sync functions for auto-population
+import { syncFromFiles } from './tools/sync-from-files.js';
+import { scanAllWorktreeCommits } from './scanners/git-commits.js';
+import { getAllStreams } from './database/queries/streams.js';
+import { getTotalCommitsCount } from './database/queries/commits.js';
+import { getDatabase } from './database/client.js';
+
 // Create MCP server
 const server = new Server(
   {
-    name: 'stream-workflow-status',
+    name: 'mcp-stream-workflow-status',
     version: '0.1.0',
   },
   {
@@ -149,6 +158,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {},
         },
       },
+      {
+        name: 'sync_from_files',
+        description: 'Sync streams from .project/plan/streams/ directory into database (auto-runs on first startup)',
+        inputSchema: {
+          type: 'object',
+          properties: {},
+        },
+      },
+      {
+        name: 'scan_commits',
+        description: 'Scan git commits from worktrees and populate commits table (for stream activity tracking)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            streamId: {
+              type: 'string',
+              description: 'Optional: scan specific stream only (otherwise scans all streams)',
+            },
+          },
+        },
+      },
     ],
   };
 });
@@ -170,6 +200,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return await getStreamStatsTool();
       case 'get_version':
         return await getVersionTool();
+      case 'sync_from_files':
+        return await syncFromFilesTool();
+      case 'scan_commits':
+        return await scanCommitsTool(args);
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
@@ -187,18 +221,59 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// Start server
-async function main() {
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error('Stream Workflow Status MCP server running on stdio');
-}
-
 // Import and start API server if enabled
 import { startApiServer } from './api/server.js';
 
-if (config.API_ENABLED) {
-  startApiServer();
+// Start server
+async function main() {
+  // Auto-sync from .project/plan/streams/ if database is empty
+  try {
+    const db = getDatabase();
+    let streamCount = getAllStreams(db).length;
+    let commitCount = getTotalCommitsCount(db);
+
+    // Sync streams from filesystem if database is empty
+    if (streamCount === 0) {
+      console.error('[MCP] Database empty, auto-syncing from .project/plan/streams/...');
+      const result = await syncFromFiles();
+      console.error(`[MCP] Auto-sync complete: ${result.synced} streams synced`);
+
+      // Re-query after sync
+      streamCount = getAllStreams(db).length;
+    }
+
+    // Auto-scan commits asynchronously (don't block server startup)
+    if (streamCount > 0 && commitCount === 0) {
+      console.error('[MCP] Scheduling background commit scan (last 50 commits or 7 days per stream)...');
+      // Run in background after server is up
+      setImmediate(async () => {
+        try {
+          const commitResult = await scanAllWorktreeCommits();
+          console.error(`[MCP] Background scan complete: ${commitResult.commitsAdded} commits from ${commitResult.scanned} streams (${commitResult.errors} errors)`);
+        } catch (error) {
+          console.error('[MCP] Background commit scan failed:', error);
+        }
+      });
+    }
+  } catch (error) {
+    console.error('[MCP] Auto-initialization failed (non-fatal):', error);
+  }
+
+  // Start API server first (if enabled) to establish multi-agent coordination
+  if (config.API_ENABLED) {
+    try {
+      const serverInfo = await startApiServer();
+      console.error(`[MCP] API server ${serverInfo.existing ? 'discovered' : 'started'} on port ${serverInfo.port}`);
+    } catch (error) {
+      console.error('[MCP] Failed to start API server:', error);
+      console.error('[MCP] Continuing with MCP tools only (API disabled)');
+    }
+  }
+
+  // Connect MCP server to stdio transport
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error('[MCP] Stream Workflow Status MCP server running on stdio');
 }
 
 main().catch((error) => {

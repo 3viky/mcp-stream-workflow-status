@@ -5,14 +5,13 @@
  */
 
 import styled from 'styled-components';
-import { Select, Input } from '@transftw/lilith-ui';
+import { Select, Input } from './ui';
 import { Search } from 'lucide-react';
 import type { FilterOptions, StreamStatus, StreamCategory, StreamPriority } from '../types';
 
 const FilterContainer = styled.div`
   display: flex;
-  gap: ${props => props.theme.spacing.md};
-  margin-bottom: ${props => props.theme.spacing.lg};
+  gap: ${props => props.theme.spacing.sm};
   flex-wrap: wrap;
   align-items: center;
 `;
@@ -28,7 +27,7 @@ const FilterGroup = styled.div`
 const FilterLabel = styled.label`
   font-size: 0.875rem;
   font-weight: 500;
-  color: ${props => props.theme.colors.textSecondary};
+  color: ${props => props.theme.colors.text.secondary};
   white-space: nowrap;
 `;
 
@@ -42,7 +41,7 @@ const SearchWrapper = styled.div`
     left: ${props => props.theme.spacing.sm};
     top: 50%;
     transform: translateY(-50%);
-    color: ${props => props.theme.colors.textSecondary};
+    color: ${props => props.theme.colors.text.secondary};
     pointer-events: none;
   }
 
@@ -92,8 +91,11 @@ export function FilterBar({ filters, onFilterChange }: FilterBarProps) {
         <Select
           value={filters.status}
           onChange={(e) => onFilterChange({ ...filters, status: e.target.value as StreamStatus | 'all' })}
-          options={statusOptions}
-        />
+        >
+          {statusOptions.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </Select>
       </FilterGroup>
 
       <FilterGroup>
@@ -101,8 +103,11 @@ export function FilterBar({ filters, onFilterChange }: FilterBarProps) {
         <Select
           value={filters.category}
           onChange={(e) => onFilterChange({ ...filters, category: e.target.value as StreamCategory | 'all' })}
-          options={categoryOptions}
-        />
+        >
+          {categoryOptions.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </Select>
       </FilterGroup>
 
       <FilterGroup>
@@ -110,8 +115,11 @@ export function FilterBar({ filters, onFilterChange }: FilterBarProps) {
         <Select
           value={filters.priority}
           onChange={(e) => onFilterChange({ ...filters, priority: e.target.value as StreamPriority | 'all' })}
-          options={priorityOptions}
-        />
+        >
+          {priorityOptions.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </Select>
       </FilterGroup>
 
       <SearchWrapper>

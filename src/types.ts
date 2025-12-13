@@ -99,8 +99,10 @@ export interface RemoveStreamParams {
 // Configuration
 export interface Config {
   PROJECT_ROOT: string;
+  PROJECT_NAME: string;
   WORKTREE_ROOT: string;
   DATABASE_PATH: string;
-  API_PORT: number;
+  LOCK_FILE_PATH: string;
+  API_PORT?: number; // Optional - will be discovered from lock file or auto-allocated
   API_ENABLED: boolean;
 }

@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import styled from 'styled-components';
-import { StatusBadge } from '@transftw/lilith-ui';
+import { StatusBadge } from './ui';
 import { ArrowUpDown } from 'lucide-react';
 import type { Stream } from '../types';
 
@@ -24,7 +24,7 @@ const Table = styled.table`
 `;
 
 const TableHead = styled.thead`
-  background: ${props => props.theme.colors.surfaceHover};
+  background: ${props => props.theme.colors.hover.surface};
   border-bottom: 2px solid ${props => props.theme.colors.border};
 `;
 
@@ -33,7 +33,7 @@ const TableHeader = styled.th<{ $sortable?: boolean }>`
   text-align: left;
   font-weight: 600;
   font-size: 0.875rem;
-  color: ${props => props.theme.colors.textSecondary};
+  color: ${props => props.theme.colors.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.5px;
   cursor: ${props => props.$sortable ? 'pointer' : 'default'};
@@ -56,7 +56,7 @@ const TableBody = styled.tbody`
     transition: background 0.2s ease;
 
     &:hover {
-      background: ${props => props.theme.colors.surfaceHover};
+      background: ${props => props.theme.colors.hover.surface};
     }
 
     &:last-child {
@@ -67,7 +67,7 @@ const TableBody = styled.tbody`
 
 const TableCell = styled.td`
   padding: ${props => props.theme.spacing.md};
-  color: ${props => props.theme.colors.text};
+  color: ${props => props.theme.colors.text.primary};
 `;
 
 const StreamNumber = styled.span`
@@ -83,19 +83,19 @@ const StreamTitle = styled.div`
 
 const ActivityText = styled.div`
   font-size: 0.875rem;
-  color: ${props => props.theme.colors.textSecondary};
+  color: ${props => props.theme.colors.text.secondary};
 `;
 
 const CommitMessage = styled.div`
   font-size: 0.875rem;
-  color: ${props => props.theme.colors.text};
+  color: ${props => props.theme.colors.text.primary};
   margin-bottom: 4px;
 `;
 
 const NoResults = styled.div`
   padding: ${props => props.theme.spacing.xl};
   text-align: center;
-  color: ${props => props.theme.colors.textSecondary};
+  color: ${props => props.theme.colors.text.secondary};
 `;
 
 interface StreamTableProps {
@@ -131,21 +131,6 @@ export function StreamTable({ streams }: StreamTableProps) {
     if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
     return 0;
   });
-
-  const getStatusVariant = (status: string) => {
-    switch (status) {
-      case 'ready':
-        return 'success';
-      case 'in-progress':
-        return 'info';
-      case 'blocked':
-        return 'error';
-      case 'completed':
-        return 'neutral';
-      default:
-        return 'neutral';
-    }
-  };
 
   const formatStatus = (status: string) => {
     return status.split('-').map(word =>
@@ -199,7 +184,7 @@ export function StreamTable({ streams }: StreamTableProps) {
                 <StreamTitle>{stream.title}</StreamTitle>
               </TableCell>
               <TableCell>
-                <StatusBadge variant={getStatusVariant(stream.status)}>
+                <StatusBadge status={stream.status}>
                   {formatStatus(stream.status)}
                 </StatusBadge>
               </TableCell>

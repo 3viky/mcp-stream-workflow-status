@@ -22,7 +22,7 @@ Stream Workflow Status is an MCP server addon for `@3viky/mcp-stream-workflow` t
 ## Architecture
 
 ```
-@3viky/stream-workflow-status
+@3viky/mcp-stream-workflow-status
 ├── MCP Server (Node.js + TypeScript)
 │   ├── Tools: add_stream, update_stream, add_commit, etc.
 │   ├── Database: SQLite (streams, commits, history)
@@ -68,13 +68,13 @@ Add to `.claude/mcp-servers.json`:
 
 ```json
 {
-  "stream-workflow-status": {
+  "mcp-stream-workflow-status": {
     "command": "node",
-    "args": ["~/Code/packages/src/@mcp/stream-workflow-status/dist/server.js"],
+    "args": ["~/Code/packages/src/@mcp/mcp-stream-workflow-status/dist/server.js"],
     "env": {
       "PROJECT_ROOT": "/path/to/your/project",
       "WORKTREE_ROOT": "/path/to/worktrees",
-      "DATABASE_PATH": "~/Code/packages/src/@mcp/stream-workflow-status/data/streams.db",
+      "DATABASE_PATH": "~/Code/packages/src/@mcp/mcp-stream-workflow-status/data/streams.db",
       "API_PORT": "3001",
       "API_ENABLED": "true"
     }

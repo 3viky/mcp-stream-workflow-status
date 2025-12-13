@@ -1,0 +1,31 @@
+{
+  "name": "@transftw/theme-provider",
+  "version": "1.0.0",
+  "type": "module",
+  "author": "Victoria Lackey <VictoriaLackey@pm.me>",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'Skipping lint - theme-provider is a minimal package'",
+    "test": "echo 'Skipping test - theme-provider has no tests yet'"
+  },
+  "dependencies": {
+    "@transftw/design-tokens": "workspace:*",
+    "react": "^18.3.1",
+    "styled-components": "^6.1.8"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "styled-components": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "typescript": "^5.7.3"
+  }
+}

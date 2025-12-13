@@ -16,21 +16,21 @@ export function getQuickStats(db: Database.Database): QuickStats {
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 
-    // Get active streams count
-    const activeStreams = getStreamsCountByStatus(db, 'active');
-
-    // Get in-progress streams (active + paused)
-    const inProgressStmt = db.prepare(`
+    // Get total active streams (not completed or archived)
+    const totalStreamsStmt = db.prepare(`
       SELECT COUNT(*) as count FROM streams
-      WHERE status IN ('active', 'paused')
+      WHERE status NOT IN ('completed', 'archived')
     `);
-    const inProgress = (inProgressStmt.get() as any).count;
+    const activeStreams = (totalStreamsStmt.get() as any).count;
+
+    // Get working streams (currently being worked on)
+    const inProgress = getStreamsCountByStatus(db, 'active');
 
     // Get blocked streams count
     const blocked = getStreamsCountByStatus(db, 'blocked');
 
-    // Get ready to start (initializing)
-    const readyToStart = getStreamsCountByStatus(db, 'initializing');
+    // Get paused streams
+    const readyToStart = getStreamsCountByStatus(db, 'paused');
 
     // Get completed today
     const completedToday = getCompletedToday(db);

@@ -1,0 +1,21 @@
+{
+  "name": "@transftw/design-tokens",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared design tokens (theme, colors, spacing, typography) for the egirl platform",
+  "author": "Victoria Lackey <VictoriaLackey@pm.me>",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "test": "vitest run --passWithNoTests",
+    "lint": "eslint . --ext ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "vitest": "^2.0.0",
+    "typescript": "^5.0.0"
+  }
+}

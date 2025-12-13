@@ -12,10 +12,10 @@ export const statsRouter: RouterType = Router();
  * GET /api/stats - Get quick statistics
  *
  * Returns dashboard statistics including:
- * - activeStreams: Number of active streams
- * - inProgress: Number of streams in progress (active + paused)
+ * - activeStreams: Total number of streams (not completed/archived)
+ * - inProgress: Number of streams actively being worked on (status='active')
  * - blocked: Number of blocked streams
- * - readyToStart: Number of streams ready to start (initializing)
+ * - readyToStart: Number of paused streams
  * - completedToday: Number of streams completed today
  * - totalCommits: Total number of commits
  * - commitsToday: Number of commits made today

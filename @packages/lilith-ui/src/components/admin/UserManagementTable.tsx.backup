@@ -1,0 +1,151 @@
+import React, { useState } from 'react'
+import styled from 'styled-components'
+import { DataTable, Column } from '../data/DataTable'
+import { Checkbox } from '../primitives/Checkbox'
+import { Button } from '../primitives/Button'
+import { StatusBadge } from '../primitives/StatusBadge'
+import { BulkActionToolbar, BulkAction } from './BulkActionToolbar'
+import { formatDate } from '../../utils/formatters'
+
+export interface User {
+  id: string
+  name: string
+  email: string
+  role: string
+  status: 'active' | 'suspended' | 'banned'
+  createdAt: Date
+}
+
+export interface UserManagementTableProps {
+  users: User[]
+  onBulkAction?: (action: string, userIds: string[]) => void
+  onUserEdit?: (user: User) => void
+  onUserDelete?: (userId: string) => void
+  loading?: boolean
+}
+
+const TableWrapper = styled.div`
+  position: relative;
+`
+
+const Actions = styled.div`
+  display: flex;
+  gap: ${(props) => props.theme.spacing.sm};
+`
+
+export const UserManagementTable: React.FC<UserManagementTableProps> = ({
+  users,
+  onBulkAction,
+  onUserEdit,
+  onUserDelete,
+  loading = false
+}) => {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [_selectAll, setSelectAll] = useState(false)
+
+
+  const handleSelectUser = (userId: string) => {
+    const newSelected = new Set(selectedIds)
+    if (newSelected.has(userId)) {
+      newSelected.delete(userId)
+    } else {
+      newSelected.add(userId)
+    }
+    setSelectedIds(newSelected)
+    setSelectAll(false)
+  }
+
+  const handleBulkAction = (actionId: string) => {
+    if (onBulkAction && selectedIds.size > 0) {
+      onBulkAction(actionId, Array.from(selectedIds))
+      setSelectedIds(new Set())
+      setSelectAll(false)
+    }
+  }
+
+  const bulkActions: BulkAction[] = [
+    { id: 'activate', label: 'Activate', variant: 'secondary' },
+    { id: 'suspend', label: 'Suspend', variant: 'secondary' },
+    { id: 'delete', label: 'Delete', variant: 'danger', confirmRequired: true }
+  ]
+
+  const columns: Column<User>[] = [
+    {
+      key: 'select',
+      header: '',
+      render: (user) => (
+        <Checkbox
+          checked={selectedIds.has(user.id)}
+          onChange={() => handleSelectUser(user.id)}
+          aria-label={`Select ${user.name}`}
+        />
+      )
+    },
+    {
+      key: 'name',
+      header: 'Name',
+      render: (user) => user.name
+    },
+    {
+      key: 'email',
+      header: 'Email',
+      render: (user) => user.email
+    },
+    {
+      key: 'role',
+      header: 'Role',
+      render: (user) => user.role
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (user) => {
+        const variantMap = {
+          active: 'success' as const,
+          suspended: 'warning' as const,
+          banned: 'error' as const
+        }
+        return <StatusBadge variant={variantMap[user.status]}>{user.status}</StatusBadge>
+      }
+    },
+    {
+      key: 'createdAt',
+      header: 'Created',
+      render: (user) => formatDate(user.createdAt)
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (user) => (
+        <Actions>
+          {onUserEdit && (
+            <Button variant="secondary" size="sm" onClick={() => onUserEdit(user)}>
+              Edit
+            </Button>
+          )}
+          {onUserDelete && (
+            <Button variant="danger" size="sm" onClick={() => onUserDelete(user.id)}>
+              Delete
+            </Button>
+          )}
+        </Actions>
+      )
+    }
+  ]
+
+  return (
+    <TableWrapper>
+      <BulkActionToolbar
+        selectedCount={selectedIds.size}
+        actions={bulkActions}
+        onAction={handleBulkAction}
+        onClearSelection={() => {
+          setSelectedIds(new Set())
+          setSelectAll(false)
+        }}
+        loading={loading}
+      />
+      <DataTable columns={columns} data={users} keyExtractor={(user) => user.id} isLoading={loading} />
+    </TableWrapper>
+  )
+}

@@ -5,57 +5,62 @@
  */
 
 import styled from 'styled-components';
-import { Card } from '@transftw/lilith-ui';
+import { Card } from './ui';
 import type { QuickStats as QuickStatsType } from '../types';
 
 const StatsGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: ${props => props.theme.spacing.md};
-  margin-bottom: ${props => props.theme.spacing.lg};
+  gap: ${props => props.theme.spacing.sm};
 `;
 
 const StatCard = styled(Card)`
-  padding: ${props => props.theme.spacing.md};
+  padding: ${props => props.theme.spacing.sm} ${props => props.theme.spacing.md};
   text-align: center;
 `;
 
 const StatValue = styled.div`
-  font-size: 2.5rem;
+  font-size: 2rem;
   font-weight: 700;
   color: ${props => props.theme.colors.primary};
-  margin-bottom: ${props => props.theme.spacing.xs};
+  margin-bottom: 2px;
+  line-height: 1;
 `;
 
 const StatLabel = styled.div`
   font-size: 0.875rem;
-  color: ${props => props.theme.colors.textSecondary};
+  color: ${props => props.theme.colors.text.secondary};
   text-transform: uppercase;
   letter-spacing: 0.5px;
 `;
 
 interface QuickStatsProps {
   stats: QuickStatsType;
+  loading?: boolean;
 }
 
-export function QuickStats({ stats }: QuickStatsProps) {
+export function QuickStats({ stats, loading = false }: QuickStatsProps) {
+  const displayStats = loading && Object.values(stats).every(v => v === 0)
+    ? { activeStreams: '—', inProgress: '—', blocked: '—', readyToStart: '—' }
+    : stats;
+
   return (
     <StatsGrid>
       <StatCard>
-        <StatValue>{stats.activeStreams}</StatValue>
-        <StatLabel>Active Streams</StatLabel>
+        <StatValue>{displayStats.activeStreams}</StatValue>
+        <StatLabel>Total Streams</StatLabel>
       </StatCard>
       <StatCard>
-        <StatValue>{stats.inProgress}</StatValue>
-        <StatLabel>In Progress</StatLabel>
+        <StatValue>{displayStats.inProgress}</StatValue>
+        <StatLabel>Working</StatLabel>
       </StatCard>
       <StatCard>
-        <StatValue>{stats.blocked}</StatValue>
+        <StatValue>{displayStats.blocked}</StatValue>
         <StatLabel>Blocked</StatLabel>
       </StatCard>
       <StatCard>
-        <StatValue>{stats.readyToStart}</StatValue>
-        <StatLabel>Ready to Start</StatLabel>
+        <StatValue>{displayStats.readyToStart}</StatValue>
+        <StatLabel>Paused</StatLabel>
       </StatCard>
     </StatsGrid>
   );

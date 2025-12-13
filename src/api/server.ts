@@ -1,7 +1,11 @@
 /**
  * Express API Server for Stream Workflow Status
  *
- * Serves REST API endpoints and static dashboard files
+ * Implements multi-agent coordination:
+ * - Discovers existing API servers via lock files
+ * - Reuses existing servers for the same project
+ * - Only starts new server if none exists
+ * - Cleans up lock files on shutdown
  */
 
 import express from 'express';
@@ -12,6 +16,12 @@ import { config } from '../config.js';
 import { streamsRouter } from './routes/streams.js';
 import { commitsRouter } from './routes/commits.js';
 import { statsRouter } from './routes/stats.js';
+import {
+  discoverApiServer,
+  writeLockFile,
+  setupGracefulShutdown,
+  type ServerLock,
+} from '../utils/server-discovery.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,28 +47,80 @@ app.get('*', (req, res) => {
 });
 
 /**
- * Start the API server
+ * Start the API server with multi-agent coordination
  *
- * Only starts if API_ENABLED is true in config.
- * Logs server URL and available endpoints.
+ * Discovers if a server is already running for this project.
+ * If found, returns existing server info without starting a new one.
+ * If not found, starts new server and writes lock file.
+ *
+ * @returns Server information (port, existing flag)
  */
-export function startApiServer(): void {
+export async function startApiServer(): Promise<{ port: number; existing: boolean }> {
   if (!config.API_ENABLED) {
-    console.log('API server disabled (API_ENABLED=false)');
-    return;
+    console.error('[Server] API server disabled (API_ENABLED=false)');
+    throw new Error('API server is disabled');
   }
 
-  app.listen(config.API_PORT, () => {
-    console.log(`\n${'='.repeat(60)}`);
-    console.log('Stream Workflow Status API Server');
-    console.log(`${'='.repeat(60)}\n`);
-    console.log(`Dashboard:      http://localhost:${config.API_PORT}/`);
-    console.log(`API Endpoints:  http://localhost:${config.API_PORT}/api/`);
-    console.log(`\nAvailable Routes:`);
-    console.log(`  GET /api/streams              List all streams`);
-    console.log(`  GET /api/streams/:id          Get single stream`);
-    console.log(`  GET /api/commits              Get recent commits`);
-    console.log(`  GET /api/stats                Get statistics`);
-    console.log(`\n${'='.repeat(60)}\n`);
+  // Discover if server already exists for this project
+  const discovery = await discoverApiServer(
+    config.LOCK_FILE_PATH,
+    config.PROJECT_ROOT,
+    config.PROJECT_NAME
+  );
+
+  if (discovery.existing) {
+    // Server already running, reuse it
+    console.error(`[Server] Reusing existing server for ${config.PROJECT_NAME} on port ${discovery.port}`);
+    console.error(`[Server] Dashboard: http://localhost:${discovery.port}/`);
+    return { port: discovery.port, existing: true };
+  }
+
+  // No existing server, start new one
+  const port = discovery.port;
+
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, () => {
+      console.error(`\n${'='.repeat(60)}`);
+      console.error('Stream Workflow Status API Server');
+      console.error(`${'='.repeat(60)}\n`);
+      console.error(`Project:        ${config.PROJECT_NAME}`);
+      console.error(`Dashboard:      http://localhost:${port}/`);
+      console.error(`API Endpoints:  http://localhost:${port}/api/`);
+      console.error(`Database:       ${config.DATABASE_PATH}`);
+      console.error(`Lock File:      ${config.LOCK_FILE_PATH}`);
+      console.error(`\nAvailable Routes:`);
+      console.error(`  GET /api/streams              List all streams`);
+      console.error(`  GET /api/streams/:id          Get single stream`);
+      console.error(`  GET /api/commits              Get recent commits`);
+      console.error(`  GET /api/stats                Get statistics`);
+      console.error(`\n${'='.repeat(60)}\n`);
+
+      // Write lock file
+      const lock: ServerLock = {
+        pid: process.pid,
+        port,
+        projectRoot: config.PROJECT_ROOT,
+        projectName: config.PROJECT_NAME,
+        startedAt: new Date().toISOString(),
+        nodeVersion: process.version,
+      };
+
+      try {
+        writeLockFile(config.LOCK_FILE_PATH, lock);
+        console.error(`[Server] Lock file written: ${config.LOCK_FILE_PATH}`);
+      } catch (error) {
+        console.error('[Server] Failed to write lock file:', error);
+      }
+
+      // Setup graceful shutdown
+      setupGracefulShutdown(config.LOCK_FILE_PATH);
+
+      resolve({ port, existing: false });
+    });
+
+    server.on('error', (error) => {
+      console.error('[Server] Failed to start:', error);
+      reject(error);
+    });
   });
 }

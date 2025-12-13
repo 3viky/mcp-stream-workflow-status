@@ -27,6 +27,11 @@ export function insertCommit(db: Database.Database, commit: Commit): number {
 }
 
 /**
+ * Alias for insertCommit (for consistency with other modules)
+ */
+export const addCommit = insertCommit;
+
+/**
  * Get commits for a stream
  */
 export function getCommitsByStream(db: Database.Database, streamId: string): Commit[] {
@@ -51,15 +56,24 @@ export function getAllCommits(db: Database.Database): Commit[] {
 }
 
 /**
- * Get recent commits with limit
+ * Get recent commits with limit (includes stream number via JOIN)
  */
-export function getRecentCommits(db: Database.Database, limit: number = 20): Commit[] {
+export function getRecentCommits(db: Database.Database, limit: number = 20): any[] {
   const stmt = db.prepare(`
-    SELECT * FROM commits ORDER BY timestamp DESC LIMIT ?
+    SELECT
+      c.*,
+      s.stream_number
+    FROM commits c
+    LEFT JOIN streams s ON c.stream_id = s.id
+    ORDER BY c.timestamp DESC
+    LIMIT ?
   `);
 
   const rows = stmt.all(limit) as any[];
-  return rows.map(rowToCommit);
+  return rows.map(row => ({
+    ...rowToCommit(row),
+    streamNumber: row.stream_number,
+  }));
 }
 
 /**
