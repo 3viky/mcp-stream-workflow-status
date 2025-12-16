@@ -21,6 +21,8 @@ const projectStorageDir = join(
 );
 
 // Load configuration from environment variables
+// API_ENABLED defaults to true - dashboard should always be available
+// Set API_ENABLED=false to explicitly disable
 export const config: Config = {
   PROJECT_ROOT: projectRoot,
   PROJECT_NAME: projectName,
@@ -28,7 +30,7 @@ export const config: Config = {
   DATABASE_PATH: process.env.DATABASE_PATH || join(projectStorageDir, 'streams.db'),
   LOCK_FILE_PATH: join(projectStorageDir, '.api-server.lock'),
   API_PORT: process.env.API_PORT ? parseInt(process.env.API_PORT, 10) : undefined,
-  API_ENABLED: process.env.API_ENABLED === 'true' || process.env.API_ENABLED === '1',
+  API_ENABLED: process.env.API_ENABLED !== 'false' && process.env.API_ENABLED !== '0',
 };
 
 // Validate configuration

@@ -286,15 +286,19 @@ async function main() {
     console.error('[MCP] Auto-initialization failed (non-fatal):', error);
   }
 
-  // Start API server first (if enabled) to establish multi-agent coordination
+  // Start API server for dashboard (enabled by default)
+  // Set API_ENABLED=false to explicitly disable
   if (config.API_ENABLED) {
     try {
       const serverInfo = await startApiServer();
       console.error(`[MCP] API server ${serverInfo.existing ? 'discovered' : 'started'} on port ${serverInfo.port}`);
+      console.error(`[MCP] Dashboard: http://localhost:${serverInfo.port}/`);
     } catch (error) {
       console.error('[MCP] Failed to start API server:', error);
-      console.error('[MCP] Continuing with MCP tools only (API disabled)');
+      console.error('[MCP] Continuing with MCP tools only (set API_ENABLED=false to silence this)');
     }
+  } else {
+    console.error('[MCP] API server disabled (API_ENABLED=false)');
   }
 
   // Connect MCP server to stdio transport
