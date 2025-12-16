@@ -2,7 +2,7 @@
  * TypeScript type definitions for Stream Dashboard
  */
 
-export type StreamStatus = 'ready' | 'in-progress' | 'blocked' | 'completed' | 'initializing';
+export type StreamStatus = 'initializing' | 'active' | 'blocked' | 'paused' | 'completed' | 'archived';
 
 export type StreamCategory =
   | 'frontend'

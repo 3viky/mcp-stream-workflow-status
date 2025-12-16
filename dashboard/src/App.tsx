@@ -117,7 +117,13 @@ function App() {
   });
 
   // Fetch data from API
-  const { streams, loading: streamsLoading, error: streamsError } = useStreams();
+  const {
+    streams,
+    loading: streamsLoading,
+    error: streamsError,
+    archiveStream,
+    archiveStreams,
+  } = useStreams();
   const { commits, loading: commitsLoading, error: commitsError } = useCommits(20);
   const { stats, loading: statsLoading } = useStats();
 
@@ -193,7 +199,11 @@ function App() {
           {streamsLoading && streams.length === 0 ? (
             <LoadingOverlay>Loading streams...</LoadingOverlay>
           ) : (
-            <StreamTable streams={filteredStreams} />
+            <StreamTable
+              streams={filteredStreams}
+              onArchive={archiveStream}
+              onArchiveBulk={archiveStreams}
+            />
           )}
         </Section>
       </DashboardContent>

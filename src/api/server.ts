@@ -16,6 +16,7 @@ import { config } from '../config.js';
 import { streamsRouter } from './routes/streams.js';
 import { commitsRouter } from './routes/commits.js';
 import { statsRouter } from './routes/stats.js';
+import { reconciliationRouter } from './routes/reconciliation.js';
 import {
   discoverApiServer,
   writeLockFile,
@@ -36,6 +37,7 @@ app.use(express.json());
 app.use('/api/streams', streamsRouter);
 app.use('/api/commits', commitsRouter);
 app.use('/api/stats', statsRouter);
+app.use('/api/reconciliation', reconciliationRouter);
 
 // Serve dashboard (static files from dashboard/dist)
 const dashboardPath = path.join(__dirname, '../../dashboard/dist');
@@ -89,10 +91,15 @@ export async function startApiServer(): Promise<{ port: number; existing: boolea
       console.error(`Database:       ${config.DATABASE_PATH}`);
       console.error(`Lock File:      ${config.LOCK_FILE_PATH}`);
       console.error(`\nAvailable Routes:`);
-      console.error(`  GET /api/streams              List all streams`);
-      console.error(`  GET /api/streams/:id          Get single stream`);
-      console.error(`  GET /api/commits              Get recent commits`);
-      console.error(`  GET /api/stats                Get statistics`);
+      console.error(`  GET  /api/streams              List all streams`);
+      console.error(`  GET  /api/streams/:id          Get single stream`);
+      console.error(`  PATCH /api/streams/:id         Update stream status`);
+      console.error(`  POST /api/streams/:id/archive  Archive single stream`);
+      console.error(`  POST /api/streams/archive-bulk Archive multiple streams`);
+      console.error(`  GET  /api/commits              Get recent commits`);
+      console.error(`  GET  /api/stats                Get statistics`);
+      console.error(`  GET  /api/reconciliation/status  Compare DB vs worktrees`);
+      console.error(`  POST /api/reconciliation/run     Run reconciliation`);
       console.error(`\n${'='.repeat(60)}\n`);
 
       // Write lock file
