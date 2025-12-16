@@ -23,6 +23,7 @@ import { getStreamStatsTool } from './tools/get-stream-stats.js';
 import { getVersionTool } from './tools/get-version.js';
 import { syncFromFilesTool } from './tools/sync-from-files.js';
 import { scanCommitsTool } from './scanners/git-commits.js';
+import { reconcileWorktreesTool } from './scanners/worktree-reconciliation.js';
 
 // Validate configuration
 validateConfig();
@@ -41,7 +42,7 @@ import { getDatabase } from './database/client.js';
 const server = new Server(
   {
     name: 'mcp-stream-workflow-status',
-    version: '0.1.0',
+    version: '0.2.0',
   },
   {
     capabilities: {
@@ -179,6 +180,30 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
+      {
+        name: 'reconcile_worktrees',
+        description: 'Reconcile database with actual git worktrees. Identifies stale entries (no worktree), completed streams (merged to main), and orphaned worktrees (no DB entry).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            dryRun: {
+              type: 'boolean',
+              default: true,
+              description: 'Only report differences, do not update database (default: true)',
+            },
+            autoArchiveStale: {
+              type: 'boolean',
+              default: false,
+              description: 'Automatically mark stale streams (no worktree) as archived (default: false)',
+            },
+            autoAddOrphaned: {
+              type: 'boolean',
+              default: false,
+              description: 'Automatically add orphaned worktrees to database (default: false)',
+            },
+          },
+        },
+      },
     ],
   };
 });
@@ -204,6 +229,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         return await syncFromFilesTool();
       case 'scan_commits':
         return await scanCommitsTool(args);
+      case 'reconcile_worktrees':
+        return await reconcileWorktreesTool(args);
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
