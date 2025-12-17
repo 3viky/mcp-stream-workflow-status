@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import styled from 'styled-components';
 import { StatusBadge } from './ui';
-import { ArrowUpDown, Archive } from 'lucide-react';
+import { ArrowUpDown, Trash2 } from 'lucide-react';
 import type { Stream } from '../types';
 
 const TableContainer = styled.div`
@@ -157,18 +157,18 @@ const SelectedCount = styled.span`
 
 interface StreamTableProps {
   streams: Stream[];
-  onArchive?: (streamId: string) => Promise<boolean>;
-  onArchiveBulk?: (streamIds: string[]) => Promise<{ success: boolean; results: any[] }>;
+  onRetire?: (streamId: string) => Promise<boolean>;
+  onRetireBulk?: (streamIds: string[]) => Promise<{ success: boolean; results: any[] }>;
 }
 
 type SortColumn = 'streamNumber' | 'title' | 'status' | 'category' | 'priority';
 type SortDirection = 'asc' | 'desc';
 
-export function StreamTable({ streams, onArchive, onArchiveBulk }: StreamTableProps) {
+export function StreamTable({ streams, onRetire, onRetireBulk }: StreamTableProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>('streamNumber');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [archiving, setArchiving] = useState<Set<string>>(new Set());
+  const [retiring, setRetiring] = useState<Set<string>>(new Set());
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -191,19 +191,11 @@ export function StreamTable({ streams, onArchive, onArchiveBulk }: StreamTablePr
     });
   };
 
-  const toggleSelectAll = () => {
-    if (selectedIds.size === streams.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(streams.map(s => s.id)));
-    }
-  };
-
-  const handleArchive = async (streamId: string) => {
-    if (!onArchive) return;
-    setArchiving(prev => new Set(prev).add(streamId));
-    await onArchive(streamId);
-    setArchiving(prev => {
+  const handleRetire = async (streamId: string) => {
+    if (!onRetire) return;
+    setRetiring(prev => new Set(prev).add(streamId));
+    await onRetire(streamId);
+    setRetiring(prev => {
       const next = new Set(prev);
       next.delete(streamId);
       return next;
@@ -215,12 +207,12 @@ export function StreamTable({ streams, onArchive, onArchiveBulk }: StreamTablePr
     });
   };
 
-  const handleBulkArchive = async () => {
-    if (!onArchiveBulk || selectedIds.size === 0) return;
+  const handleBulkRetire = async () => {
+    if (!onRetireBulk || selectedIds.size === 0) return;
     const ids = Array.from(selectedIds);
-    ids.forEach(id => setArchiving(prev => new Set(prev).add(id)));
-    await onArchiveBulk(ids);
-    setArchiving(new Set());
+    ids.forEach(id => setRetiring(prev => new Set(prev).add(id)));
+    await onRetireBulk(ids);
+    setRetiring(new Set());
     setSelectedIds(new Set());
   };
 
@@ -252,28 +244,44 @@ export function StreamTable({ streams, onArchive, onArchiveBulk }: StreamTablePr
     );
   }
 
-  const hasArchive = Boolean(onArchive || onArchiveBulk);
+  const hasRetire = Boolean(onRetire || onRetireBulk);
+  const completedStreams = streams.filter(s => s.status === 'completed');
+  const canRetireSelected = Array.from(selectedIds).every(id =>
+    streams.find(s => s.id === id)?.status === 'completed'
+  );
 
   return (
     <TableContainer>
-      {selectedIds.size > 0 && onArchiveBulk && (
+      {selectedIds.size > 0 && onRetireBulk && (
         <BulkActionBar>
           <SelectedCount>{selectedIds.size} stream(s) selected</SelectedCount>
-          <ActionButton onClick={handleBulkArchive} $variant="danger">
-            <Archive size={14} />
-            Archive Selected
+          <ActionButton
+            onClick={handleBulkRetire}
+            $variant="danger"
+            disabled={!canRetireSelected}
+            title={canRetireSelected ? "Retire selected completed streams" : "Only completed streams can be retired"}
+          >
+            <Trash2 size={14} />
+            Retire Selected
           </ActionButton>
         </BulkActionBar>
       )}
       <Table>
         <TableHead>
           <tr>
-            {hasArchive && (
+            {hasRetire && (
               <TableHeader>
                 <SelectAllCheckbox
                   type="checkbox"
-                  checked={selectedIds.size === streams.length && streams.length > 0}
-                  onChange={toggleSelectAll}
+                  checked={selectedIds.size === completedStreams.length && completedStreams.length > 0}
+                  onChange={() => {
+                    if (selectedIds.size === completedStreams.length && completedStreams.length > 0) {
+                      setSelectedIds(new Set());
+                    } else {
+                      setSelectedIds(new Set(completedStreams.map(s => s.id)));
+                    }
+                  }}
+                  title="Select all completed streams"
                 />
               </TableHeader>
             )}
@@ -298,18 +306,22 @@ export function StreamTable({ streams, onArchive, onArchiveBulk }: StreamTablePr
               <ArrowUpDown size={14} />
             </TableHeader>
             <TableHeader>Recent Activity</TableHeader>
-            {hasArchive && <TableHeader>Actions</TableHeader>}
+            {hasRetire && <TableHeader>Actions</TableHeader>}
           </tr>
         </TableHead>
         <TableBody>
-          {sortedStreams.map((stream) => (
+          {sortedStreams.map((stream) => {
+            const canRetire = stream.status === 'completed';
+            return (
             <tr key={stream.id}>
-              {hasArchive && (
+              {hasRetire && (
                 <TableCell>
                   <RowCheckbox
                     type="checkbox"
                     checked={selectedIds.has(stream.id)}
                     onChange={() => toggleSelect(stream.id)}
+                    disabled={!canRetire}
+                    title={canRetire ? "Select for retirement" : "Only completed streams can be retired"}
                   />
                 </TableCell>
               )}
@@ -334,31 +346,33 @@ export function StreamTable({ streams, onArchive, onArchiveBulk }: StreamTablePr
                       {stream.recentActivity.filesChanged} files changed • {stream.recentActivity.lastCommitTime}
                     </ActivityText>
                   </>
+                ) : stream.status === 'completed' ? (
+                  <ActivityText>⚠️ Ready to retire</ActivityText>
                 ) : (
                   <ActivityText>No commits yet</ActivityText>
                 )}
               </TableCell>
-              {hasArchive && (
+              {hasRetire && (
                 <TableCell>
                   <ActionCell>
-                    {stream.status !== 'archived' && onArchive && (
+                    {stream.status === 'completed' && onRetire && (
                       <ActionButton
-                        onClick={() => handleArchive(stream.id)}
-                        disabled={archiving.has(stream.id)}
-                        title="Archive this stream"
+                        onClick={() => handleRetire(stream.id)}
+                        disabled={retiring.has(stream.id)}
+                        title="Retire this stream (cleanup worktree, delete from database)"
                       >
-                        <Archive size={12} />
-                        {archiving.has(stream.id) ? 'Archiving...' : 'Archive'}
+                        <Trash2 size={12} />
+                        {retiring.has(stream.id) ? 'Retiring...' : 'Retire'}
                       </ActionButton>
                     )}
-                    {stream.status === 'archived' && (
-                      <ActivityText>Archived</ActivityText>
+                    {stream.status !== 'completed' && (
+                      <ActivityText>—</ActivityText>
                     )}
                   </ActionCell>
                 </TableCell>
               )}
             </tr>
-          ))}
+          )})}
         </TableBody>
       </Table>
     </TableContainer>

@@ -12,6 +12,7 @@ import { config } from '../config.js';
 import { getDatabase } from '../database/client.js';
 import { insertStream, updateStream, getAllStreams } from '../database/queries/streams.js';
 import { addHistoryEvent } from '../database/queries/history.js';
+import { getWorktreeList, type WorktreeInfo } from '../scanners/worktree-reconciliation.js';
 import type { StreamCategory, StreamPriority, StreamStatus, Stream } from '../types.js';
 
 interface StreamMetadata {
@@ -28,8 +29,15 @@ interface StreamMetadata {
 
 /**
  * Parse stream metadata from markdown file
+ * @param filePath - Path to the markdown file
+ * @param streamId - Stream identifier (e.g., "stream-0107-feature-name")
+ * @param worktrees - Map of stream IDs to worktree info from git discovery
  */
-function parseStreamMarkdown(filePath: string, streamId: string): StreamMetadata | null {
+function parseStreamMarkdown(
+  filePath: string,
+  streamId: string,
+  worktrees: Map<string, WorktreeInfo>
+): StreamMetadata | null {
   try {
     const content = readFileSync(filePath, 'utf-8');
 
@@ -55,9 +63,19 @@ function parseStreamMarkdown(filePath: string, streamId: string): StreamMetadata
     const numberMatch = streamId.match(/stream-(\d+)/);
     const streamNumber = frontmatter.streamNumber || (numberMatch ? numberMatch[1] : '0000');
 
-    // Determine worktree path
-    const worktreeName = streamId;
-    const worktreePath = join(config.WORKTREE_ROOT, worktreeName);
+    // Determine worktree path using git discovery (source of truth)
+    // Fall back to config-based path only if worktree doesn't exist yet
+    const worktreeInfo = worktrees.get(streamId);
+    let worktreePath: string;
+
+    if (worktreeInfo) {
+      // Use actual path from git worktree list (accurate, handles multiple directories)
+      worktreePath = worktreeInfo.path;
+    } else {
+      // Worktree doesn't exist yet - use default path from config
+      // This handles streams that have been planned but worktree not yet created
+      worktreePath = join(config.WORKTREE_ROOT, streamId);
+    }
 
     return {
       streamId,
@@ -83,12 +101,18 @@ export async function syncFromFiles(): Promise<{
   synced: number;
   skipped: number;
   errors: number;
+  worktreesDiscovered: number;
 }> {
   const streamsDir = join(config.PROJECT_ROOT, '.project', 'plan', 'streams');
 
   let synced = 0;
   let skipped = 0;
   let errors = 0;
+
+  // Get actual worktree paths from git (source of truth)
+  // This discovers worktrees across all directories, not just config.WORKTREE_ROOT
+  const worktrees = getWorktreeList();
+  const worktreesDiscovered = worktrees.size - 1; // Exclude main worktree
 
   try {
     const entries = readdirSync(streamsDir);
@@ -121,8 +145,8 @@ export async function syncFromFiles(): Promise<{
         continue;
       }
 
-      // Parse stream metadata
-      const metadata = parseStreamMarkdown(markdownPath, streamId);
+      // Parse stream metadata (uses git discovery for worktree paths)
+      const metadata = parseStreamMarkdown(markdownPath, streamId, worktrees);
 
       if (!metadata) {
         errors++;
@@ -175,7 +199,7 @@ export async function syncFromFiles(): Promise<{
     throw error;
   }
 
-  return { synced, skipped, errors };
+  return { synced, skipped, errors, worktreesDiscovered };
 }
 
 /**
@@ -189,10 +213,12 @@ export async function syncFromFilesTool(): Promise<any> {
       {
         type: 'text',
         text: `✅ Stream sync complete\n\n` +
+              `Git worktrees discovered: ${result.worktreesDiscovered}\n` +
               `Synced: ${result.synced} streams\n` +
               `Skipped: ${result.skipped} (already in database or invalid)\n` +
               `Errors: ${result.errors}\n\n` +
-              `Database: ${config.DATABASE_PATH}`,
+              `Database: ${config.DATABASE_PATH}\n\n` +
+              `Note: Worktree paths are resolved via \`git worktree list\` (source of truth)`,
       },
     ],
   };

@@ -631,7 +631,8 @@ App
 │       │   ├── TableHeader
 │       │   └── StreamRow (×N)
 │       │       └── StreamCard
-│       └── CommitStream
+│       └── ActivityTimeline
+│           ├── TimelineSection (×N)
 │           └── CommitCard (×N)
 ```
 
@@ -681,31 +682,59 @@ export const StreamTable: React.FC<StreamTableProps> = ({ streams, onStreamClick
 };
 ```
 
-**2. CommitStream** (`src/components/CommitStream.tsx`)
+**2. ActivityTimeline** (`src/components/ActivityTimeline.tsx`)
 
-Shows recent commits from all worktrees.
+Rich commit timeline with virtualization, grouping, and filtering. Replaces the legacy CommitStream.
 
 ```typescript
-interface CommitStreamProps {
+interface ActivityTimelineProps {
   commits: Commit[];
-  limit?: number;
+  streams: Stream[];
+  loading?: boolean;
+  loadingMore?: boolean;
+  hasMore?: boolean;
+  onLoadMore?: () => void;
 }
 
-export const CommitStream: React.FC<CommitStreamProps> = ({ commits, limit = 50 }) => {
-  const recentCommits = useMemo(() =>
-    commits.slice(0, limit),
-    [commits, limit]
+export function ActivityTimeline({
+  commits,
+  streams,
+  loading,
+  loadingMore,
+  hasMore,
+  onLoadMore,
+}: ActivityTimelineProps) {
+  // Enrich commits with stream context (branch, worktree, status)
+  const enrichedCommits = useMemo(
+    () => enrichCommits(commits, streams),
+    [commits, streams]
   );
 
-  return (
-    <CommitList>
-      {recentCommits.map(commit => (
-        <CommitCard key={commit.commitHash} commit={commit} />
-      ))}
-    </CommitList>
+  // Group commits by time/stream/author
+  const groupedCommits = useMemo(
+    () => groupCommits(enrichedCommits, groupBy),
+    [enrichedCommits, groupBy]
   );
-};
+
+  // Virtualized rendering with react-window
+  return (
+    <VariableSizeList
+      itemCount={flatItems.length}
+      itemSize={getItemSize}
+      onItemsRendered={handleItemsRendered}
+    >
+      {renderItem}
+    </VariableSizeList>
+  );
+}
 ```
+
+Features:
+- **Virtualization**: react-window VariableSizeList for smooth scrolling with 1000+ commits
+- **Activity Heat**: Color-coded borders (hot/warm/cold) based on commit recency
+- **Temporal Grouping**: Today → Yesterday → This Week → Older
+- **Expand/Collapse**: CommitCard details with dynamic height recalculation
+- **Infinite Scroll**: Load more commits as user scrolls
 
 **3. QuickStats** (`src/components/QuickStats.tsx`)
 

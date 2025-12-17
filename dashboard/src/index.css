@@ -9,11 +9,9 @@
 }
 
 html,
-body,
-#root {
+body {
   height: 100%;
   width: 100%;
-  overflow: hidden;
 }
 
 body {
@@ -24,6 +22,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background: #0f1419;
   color: #e6edf3;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 code {

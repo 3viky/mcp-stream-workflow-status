@@ -20,8 +20,7 @@ const FilterGroup = styled.div`
   display: flex;
   align-items: center;
   gap: ${props => props.theme.spacing.sm};
-  flex: 1;
-  min-width: 200px;
+  flex-shrink: 0;
 `;
 
 const FilterLabel = styled.label`
@@ -33,8 +32,9 @@ const FilterLabel = styled.label`
 
 const SearchWrapper = styled.div`
   position: relative;
-  flex: 2;
-  min-width: 250px;
+  flex: 1;
+  min-width: 200px;
+  max-width: 400px;
 
   svg {
     position: absolute;
@@ -57,10 +57,12 @@ interface FilterBarProps {
 
 const statusOptions = [
   { value: 'all', label: 'All Status' },
-  { value: 'ready', label: 'Ready' },
-  { value: 'in-progress', label: 'In Progress' },
+  { value: 'initializing', label: 'Initializing' },
+  { value: 'active', label: 'Active' },
   { value: 'blocked', label: 'Blocked' },
-  { value: 'completed', label: 'Completed' },
+  { value: 'paused', label: 'Paused' },
+  { value: 'completed', label: 'Completed (Ready to Retire)' },
+  // Note: 'archived' removed - retired streams are deleted from database
 ];
 
 const categoryOptions = [

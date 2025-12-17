@@ -56,9 +56,9 @@ export function getAllCommits(db: Database.Database): Commit[] {
 }
 
 /**
- * Get recent commits with limit (includes stream number via JOIN)
+ * Get recent commits with limit and offset (includes stream number via JOIN)
  */
-export function getRecentCommits(db: Database.Database, limit: number = 20): any[] {
+export function getRecentCommits(db: Database.Database, limit: number = 20, offset: number = 0): any[] {
   const stmt = db.prepare(`
     SELECT
       c.*,
@@ -66,10 +66,10 @@ export function getRecentCommits(db: Database.Database, limit: number = 20): any
     FROM commits c
     LEFT JOIN streams s ON c.stream_id = s.id
     ORDER BY c.timestamp DESC
-    LIMIT ?
+    LIMIT ? OFFSET ?
   `);
 
-  const rows = stmt.all(limit) as any[];
+  const rows = stmt.all(limit, offset) as any[];
   return rows.map(row => ({
     ...rowToCommit(row),
     streamNumber: row.stream_number,

@@ -4,6 +4,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Stream } from '../types';
+import { useServerEvents } from './useServerEvents';
+import { useConnectionStatus } from '../contexts/ConnectionContext';
 
 // Dynamically detect API port from current window location
 const API_BASE = typeof window !== 'undefined'
@@ -15,8 +17,8 @@ interface UseStreamsResult {
   loading: boolean;
   error: string | null;
   refetch: () => void;
-  archiveStream: (streamId: string) => Promise<boolean>;
-  archiveStreams: (streamIds: string[]) => Promise<{ success: boolean; results: any[] }>;
+  retireStream: (streamId: string) => Promise<boolean>;
+  retireStreams: (streamIds: string[]) => Promise<{ success: boolean; results: any[] }>;
   updateStreamStatus: (streamId: string, status: string) => Promise<boolean>;
 }
 
@@ -24,6 +26,7 @@ export function useStreams(): UseStreamsResult {
   const [streams, setStreams] = useState<Stream[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { markDataReceived, markError: reportError } = useConnectionStatus();
 
   const fetchStreams = useCallback(async () => {
     try {
@@ -37,15 +40,17 @@ export function useStreams(): UseStreamsResult {
 
       const data = await response.json();
       setStreams(data.streams || []);
+      markDataReceived();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch streams');
+      reportError();
       console.error('Error fetching streams:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [markDataReceived, reportError]);
 
-  const archiveStream = useCallback(async (streamId: string): Promise<boolean> => {
+  const retireStream = useCallback(async (streamId: string): Promise<boolean> => {
     try {
       const response = await fetch(`${API_BASE}/streams/${encodeURIComponent(streamId)}/archive`, {
         method: 'POST',
@@ -55,19 +60,18 @@ export function useStreams(): UseStreamsResult {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      // Update local state
-      setStreams(prev => prev.map(s =>
-        s.id === streamId ? { ...s, status: 'archived' as Stream['status'] } : s
-      ));
+      // Stream is DELETED from database after retirement
+      // Remove it from local state immediately
+      setStreams(prev => prev.filter(s => s.id !== streamId));
 
       return true;
     } catch (err) {
-      console.error('Error archiving stream:', err);
+      console.error('Error retiring stream:', err);
       return false;
     }
   }, []);
 
-  const archiveStreams = useCallback(async (streamIds: string[]): Promise<{ success: boolean; results: any[] }> => {
+  const retireStreams = useCallback(async (streamIds: string[]): Promise<{ success: boolean; results: any[] }> => {
     try {
       const response = await fetch(`${API_BASE}/streams/archive-bulk`, {
         method: 'POST',
@@ -81,20 +85,19 @@ export function useStreams(): UseStreamsResult {
 
       const data = await response.json();
 
-      // Update local state for successfully archived streams
-      const archivedIds = new Set(
+      // Streams are DELETED from database after retirement
+      // Remove successfully retired streams from local state
+      const retiredIds = new Set(
         data.results
-          .filter((r: any) => r.success)
+          .filter((r: any) => r.success && r.deleted)
           .map((r: any) => r.streamId)
       );
 
-      setStreams(prev => prev.map(s =>
-        archivedIds.has(s.id) ? { ...s, status: 'archived' as Stream['status'] } : s
-      ));
+      setStreams(prev => prev.filter(s => !retiredIds.has(s.id)));
 
       return data;
     } catch (err) {
-      console.error('Error archiving streams:', err);
+      console.error('Error retiring streams:', err);
       return { success: false, results: [] };
     }
   }, []);
@@ -123,22 +126,21 @@ export function useStreams(): UseStreamsResult {
     }
   }, []);
 
+  // Initial fetch
   useEffect(() => {
     fetchStreams();
-
-    // Poll for updates every 30 seconds
-    const interval = setInterval(fetchStreams, 30000);
-
-    return () => clearInterval(interval);
   }, [fetchStreams]);
+
+  // Subscribe to SSE updates (replaces polling)
+  useServerEvents('streams', fetchStreams);
 
   return {
     streams,
     loading,
     error,
     refetch: fetchStreams,
-    archiveStream,
-    archiveStreams,
+    retireStream,
+    retireStreams,
     updateStreamStatus,
   };
 }

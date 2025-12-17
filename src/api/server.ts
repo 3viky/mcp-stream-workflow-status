@@ -23,6 +23,8 @@ import {
   setupGracefulShutdown,
   type ServerLock,
 } from '../utils/server-discovery.js';
+import { eventManager, notifyUpdate } from './events.js';
+import { scanAllWorktreeCommits } from '../scanners/git-commits.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +40,11 @@ app.use('/api/streams', streamsRouter);
 app.use('/api/commits', commitsRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/reconciliation', reconciliationRouter);
+
+// SSE endpoint for real-time updates
+app.get('/api/events', (req, res) => {
+  eventManager.addClient(res);
+});
 
 // Serve dashboard (static files from dashboard/dist)
 const dashboardPath = path.join(__dirname, '../../dashboard/dist');
@@ -122,6 +129,9 @@ export async function startApiServer(): Promise<{ port: number; existing: boolea
       // Setup graceful shutdown
       setupGracefulShutdown(config.LOCK_FILE_PATH);
 
+      // Start periodic git scanning (every 60 seconds)
+      startPeriodicScanning();
+
       resolve({ port, existing: false });
     });
 
@@ -130,4 +140,37 @@ export async function startApiServer(): Promise<{ port: number; existing: boolea
       reject(error);
     });
   });
+}
+
+const SCAN_INTERVAL_MS = 60_000; // 1 minute
+let scanningInterval: NodeJS.Timeout | null = null;
+
+/**
+ * Start periodic git commit scanning
+ * Scans every 60 seconds and notifies connected clients of new data
+ */
+function startPeriodicScanning(): void {
+  if (scanningInterval) {
+    clearInterval(scanningInterval);
+  }
+
+  console.error(`[Scanner] Starting periodic git scan (every ${SCAN_INTERVAL_MS / 1000}s)`);
+
+  scanningInterval = setInterval(async () => {
+    try {
+      const result = await scanAllWorktreeCommits();
+
+      // Only notify if new commits were added
+      if (result.commitsAdded > 0) {
+        console.error(`[Scanner] Found ${result.commitsAdded} new commits`);
+        notifyUpdate('commits');
+        notifyUpdate('stats');
+      }
+    } catch (error) {
+      console.error('[Scanner] Periodic scan failed:', error);
+    }
+  }, SCAN_INTERVAL_MS);
+
+  // Don't prevent process exit
+  scanningInterval.unref();
 }

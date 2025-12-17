@@ -106,6 +106,7 @@ export function getStreamById(db: Database.Database, streamId: string): Stream |
 
 /**
  * Get all streams with optional filters
+ * Includes recentActivity from commits table
  */
 export function getAllStreams(
   db: Database.Database,
@@ -114,24 +115,78 @@ export function getAllStreams(
     category?: string;
   }
 ): Stream[] {
-  let query = `SELECT * FROM streams WHERE 1=1`;
+  // Query streams with their most recent commit via LEFT JOIN
+  let query = `
+    SELECT
+      s.*,
+      c.message as last_commit_message,
+      c.files_changed as last_commit_files,
+      c.timestamp as last_commit_time,
+      c.author as last_commit_author
+    FROM streams s
+    LEFT JOIN (
+      SELECT stream_id, message, files_changed, timestamp, author,
+             ROW_NUMBER() OVER (PARTITION BY stream_id ORDER BY timestamp DESC) as rn
+      FROM commits
+    ) c ON s.id = c.stream_id AND c.rn = 1
+    WHERE s.id != 'main'
+  `;
   const params: any[] = [];
 
   if (filters?.status) {
-    query += ` AND status = ?`;
+    query += ` AND s.status = ?`;
     params.push(filters.status);
   }
 
   if (filters?.category) {
-    query += ` AND category = ?`;
+    query += ` AND s.category = ?`;
     params.push(filters.category);
   }
 
-  query += ` ORDER BY updated_at DESC`;
+  query += ` ORDER BY s.updated_at DESC`;
 
   const stmt = db.prepare(query);
   const rows = stmt.all(...params) as any[];
-  return rows.map(rowToStream);
+  return rows.map(rowToStreamWithActivity);
+}
+
+/**
+ * Convert database row to Stream object with recentActivity
+ */
+function rowToStreamWithActivity(row: any): Stream {
+  const stream = rowToStream(row);
+
+  // Add recentActivity if commit data exists
+  if (row.last_commit_message) {
+    (stream as any).recentActivity = {
+      lastCommit: row.last_commit_message,
+      filesChanged: row.last_commit_files || 0,
+      lastCommitTime: formatRelativeTime(row.last_commit_time),
+      author: row.last_commit_author,
+    };
+  }
+
+  return stream;
+}
+
+/**
+ * Format ISO timestamp to relative time (e.g., "2 hours ago")
+ */
+function formatRelativeTime(isoTimestamp: string): string {
+  if (!isoTimestamp) return '';
+
+  const date = new Date(isoTimestamp);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffDays > 0) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  if (diffHours > 0) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  if (diffMins > 0) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+  return 'just now';
 }
 
 /**
@@ -178,6 +233,35 @@ export function touchStream(db: Database.Database, streamId: string): void {
   `);
 
   stmt.run(new Date().toISOString(), streamId);
+}
+
+/**
+ * Delete stream from database
+ *
+ * IMPORTANT: Only call this after retirement (worktree cleanup, archive report written)
+ * The stream will be permanently removed from the database.
+ * The only record will be the history file in .project/history/
+ */
+export function deleteStream(db: Database.Database, streamId: string): void {
+  // Delete associated commits first (foreign key constraint)
+  const deleteCommitsStmt = db.prepare(`
+    DELETE FROM commits WHERE stream_id = ?
+  `);
+  deleteCommitsStmt.run(streamId);
+
+  // Delete history events
+  const deleteHistoryStmt = db.prepare(`
+    DELETE FROM stream_history WHERE stream_id = ?
+  `);
+  deleteHistoryStmt.run(streamId);
+
+  // Delete the stream itself
+  const deleteStreamStmt = db.prepare(`
+    DELETE FROM streams WHERE id = ?
+  `);
+  deleteStreamStmt.run(streamId);
+
+  console.log(`[deleteStream] Stream ${streamId} removed from database`);
 }
 
 /**

@@ -9,8 +9,9 @@ import { useState } from 'react';
 import styled from 'styled-components';
 import { Heading } from './components/ui';
 import { Activity, AlertCircle } from 'lucide-react';
-import { QuickStats, FilterBar, StreamTable, CommitStream } from './components';
+import { QuickStats, FilterBar, StreamTable, ActivityTimeline } from './components';
 import { useStreams, useCommits, useStats } from './hooks';
+import { ConnectionProvider, useConnectionStatus, type ConnectionState } from './contexts/ConnectionContext';
 import type { FilterOptions } from './types';
 
 // ============================================================================
@@ -44,7 +45,17 @@ const HeaderContent = styled.div`
   gap: ${props => props.theme.spacing.md};
 `;
 
-const StatusIndicator = styled.div<{ $connected: boolean }>`
+const getStatusColor = (state: ConnectionState, theme: any): string => {
+  switch (state) {
+    case 'live': return theme.colors.success;
+    case 'stale': return theme.colors.warning;
+    case 'connecting': return theme.colors.primary;
+    case 'disconnected': return theme.colors.error;
+    default: return theme.colors.text.muted;
+  }
+};
+
+const StatusIndicator = styled.div<{ $state: ConnectionState }>`
   display: flex;
   align-items: center;
   gap: ${props => props.theme.spacing.xs};
@@ -56,8 +67,8 @@ const StatusIndicator = styled.div<{ $connected: boolean }>`
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: ${props => props.$connected ? props.theme.colors.success : props.theme.colors.error};
-    animation: ${props => props.$connected ? 'pulse 2s infinite' : 'none'};
+    background: ${props => getStatusColor(props.$state, props.theme)};
+    animation: ${props => props.$state === 'live' ? 'pulse 2s infinite' : 'none'};
   }
 
   @keyframes pulse {
@@ -73,10 +84,20 @@ const DashboardContent = styled.div`
   max-width: 1800px;
   width: 100%;
   margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: ${props => props.theme.spacing.md};
 `;
 
-const Section = styled.section<{ $maxHeight?: string; $compact?: boolean }>`
-  margin-bottom: ${props => props.$compact ? props.theme.spacing.md : props.theme.spacing.lg};
+const Section = styled.section<{ $maxHeight?: string; $compact?: boolean; $flexGrow?: boolean }>`
+  margin-bottom: 0;
+  flex-shrink: 0;
+
+  ${props => props.$flexGrow && `
+    flex: 1;
+    min-height: 200px;
+    overflow-y: auto;
+  `}
 
   ${props => props.$maxHeight && `
     max-height: ${props.$maxHeight};
@@ -108,7 +129,14 @@ const LoadingOverlay = styled.div`
 // COMPONENT
 // ============================================================================
 
-function App() {
+const STATUS_LABELS: Record<ConnectionState, string> = {
+  live: 'Live',
+  stale: 'Stale',
+  connecting: 'Connecting...',
+  disconnected: 'Disconnected',
+};
+
+function Dashboard() {
   const [filters, setFilters] = useState<FilterOptions>({
     status: 'all',
     category: 'all',
@@ -116,18 +144,22 @@ function App() {
     search: '',
   });
 
+  // Connection status from context
+  const { status: connectionStatus } = useConnectionStatus();
+
   // Fetch data from API
   const {
     streams,
     loading: streamsLoading,
     error: streamsError,
-    archiveStream,
-    archiveStreams,
+    retireStream,
+    retireStreams,
   } = useStreams();
-  const { commits, loading: commitsLoading, error: commitsError } = useCommits(20);
+  const { commits, loading: commitsLoading, loadingMore, error: commitsError, hasMore, loadMore } = useCommits(50);
   const { stats, loading: statsLoading } = useStats();
 
   // Filter streams based on current filter state
+  // Note: No need to filter 'archived' - retired streams are deleted from DB
   const filteredStreams = streams.filter((stream) => {
     if (filters.status !== 'all' && stream.status !== filters.status) return false;
     if (filters.category !== 'all' && stream.category !== filters.category) return false;
@@ -143,8 +175,10 @@ function App() {
     return true;
   });
 
-  const hasErrors = Boolean(streamsError || commitsError);
-  const isConnected = !hasErrors && !streamsLoading && !commitsLoading;
+  // Format status label with time if stale
+  const statusLabel = connectionStatus.state === 'stale' && connectionStatus.secondsSinceUpdate
+    ? `${STATUS_LABELS[connectionStatus.state]} (${connectionStatus.secondsSinceUpdate}s)`
+    : STATUS_LABELS[connectionStatus.state];
 
   return (
     <AppContainer>
@@ -155,8 +189,8 @@ function App() {
             Stream Status Dashboard
           </Heading>
         </HeaderContent>
-        <StatusIndicator $connected={isConnected}>
-          {isConnected ? 'Live' : 'Connecting...'}
+        <StatusIndicator $state={connectionStatus.state}>
+          {statusLabel}
         </StatusIndicator>
       </DashboardHeader>
 
@@ -175,12 +209,17 @@ function App() {
           </ErrorBanner>
         )}
 
-        {/* 1. Recent Commits (Top Priority - Always visible) */}
+        {/* 1. Activity Timeline (Collapsible - starts collapsed) */}
         <Section $compact>
-          <CommitStream
+          <ActivityTimeline
             commits={commits}
-            limit={20}
+            streams={streams}
             loading={commitsLoading}
+            loadingMore={loadingMore}
+            hasMore={hasMore}
+            onLoadMore={loadMore}
+            defaultCollapsed={true}
+            height={220}
           />
         </Section>
 
@@ -194,20 +233,29 @@ function App() {
           <FilterBar filters={filters} onFilterChange={setFilters} />
         </Section>
 
-        {/* 4. Streams Table (Scrollable content area) */}
-        <Section $maxHeight="800px">
+        {/* 4. Streams Table (Primary content - takes remaining space) */}
+        <Section $flexGrow>
           {streamsLoading && streams.length === 0 ? (
             <LoadingOverlay>Loading streams...</LoadingOverlay>
           ) : (
             <StreamTable
               streams={filteredStreams}
-              onArchive={archiveStream}
-              onArchiveBulk={archiveStreams}
+              onRetire={retireStream}
+              onRetireBulk={retireStreams}
             />
           )}
         </Section>
       </DashboardContent>
     </AppContainer>
+  );
+}
+
+// Wrap Dashboard with ConnectionProvider
+function App() {
+  return (
+    <ConnectionProvider>
+      <Dashboard />
+    </ConnectionProvider>
   );
 }
 

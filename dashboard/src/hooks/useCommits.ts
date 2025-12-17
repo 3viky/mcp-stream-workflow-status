@@ -1,9 +1,12 @@
 /**
  * Custom hook for fetching and managing commit data
+ * Supports infinite scroll with offset-based pagination
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Commit } from '../types';
+import { useServerEvents } from './useServerEvents';
+import { useConnectionStatus } from '../contexts/ConnectionContext';
 
 // Dynamically detect API port from current window location
 const API_BASE = typeof window !== 'undefined'
@@ -13,20 +16,37 @@ const API_BASE = typeof window !== 'undefined'
 interface UseCommitsResult {
   commits: Commit[];
   loading: boolean;
+  loadingMore: boolean;
   error: string | null;
+  hasMore: boolean;
   refetch: () => void;
+  loadMore: () => void;
 }
 
-export function useCommits(limit?: number): UseCommitsResult {
+const PAGE_SIZE = 50;
+
+export function useCommits(initialLimit?: number): UseCommitsResult {
   const [commits, setCommits] = useState<Commit[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const offsetRef = useRef(0);
+  const { markDataReceived, markError: reportError } = useConnectionStatus();
 
-  const fetchCommits = async () => {
+  const fetchCommits = useCallback(async (append = false) => {
     try {
-      setLoading(true);
+      if (append) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+        offsetRef.current = 0;
+      }
       setError(null);
-      const url = limit ? `${API_BASE}/commits?limit=${limit}` : `${API_BASE}/commits`;
+
+      const limit = initialLimit || PAGE_SIZE;
+      const offset = append ? offsetRef.current : 0;
+      const url = `${API_BASE}/commits?limit=${limit}&offset=${offset}`;
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -34,23 +54,42 @@ export function useCommits(limit?: number): UseCommitsResult {
       }
 
       const data = await response.json();
-      setCommits(data.commits || []);
+      const newCommits = data.commits || [];
+
+      if (append) {
+        setCommits(prev => [...prev, ...newCommits]);
+        offsetRef.current += newCommits.length;
+      } else {
+        setCommits(newCommits);
+        offsetRef.current = newCommits.length;
+      }
+
+      // Check if there are more commits to load
+      setHasMore(newCommits.length >= limit);
+      markDataReceived();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch commits');
+      reportError();
       console.error('Error fetching commits:', err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  };
+  }, [initialLimit, markDataReceived, reportError]);
 
+  const loadMore = useCallback(() => {
+    if (!loadingMore && hasMore) {
+      fetchCommits(true);
+    }
+  }, [fetchCommits, loadingMore, hasMore]);
+
+  // Initial fetch
   useEffect(() => {
-    fetchCommits();
+    fetchCommits(false);
+  }, [fetchCommits]);
 
-    // Poll for updates every 15 seconds (commits change more frequently)
-    const interval = setInterval(fetchCommits, 15000);
+  // Subscribe to SSE updates (replaces polling) - only refetch initial page
+  useServerEvents('commits', () => fetchCommits(false));
 
-    return () => clearInterval(interval);
-  }, [limit]);
-
-  return { commits, loading, error, refetch: fetchCommits };
+  return { commits, loading, loadingMore, error, hasMore, refetch: () => fetchCommits(false), loadMore };
 }

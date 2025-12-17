@@ -251,6 +251,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // Import and start API server if enabled
 import { startApiServer } from './api/server.js';
 
+// Import background worker
+import { startWorker } from './jobs/summary-worker.js';
+
 // Start server
 async function main() {
   // Auto-sync from .project/plan/streams/ if database is empty
@@ -300,6 +303,15 @@ async function main() {
   } else {
     console.error('[MCP] API server disabled (API_ENABLED=false)');
   }
+
+  // Start background worker for intelligent summary generation
+  // Runs asynchronously in the background, polling every 10 seconds
+  setImmediate(() => {
+    startWorker(config.PROJECT_ROOT, 10000).catch((error) => {
+      console.error('[MCP] Background worker crashed:', error);
+      // Worker has its own error handling and continues running
+    });
+  });
 
   // Connect MCP server to stdio transport
   const transport = new StdioServerTransport();

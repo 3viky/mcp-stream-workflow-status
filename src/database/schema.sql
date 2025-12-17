@@ -48,3 +48,27 @@ CREATE TABLE IF NOT EXISTS stream_history (
 
 CREATE INDEX IF NOT EXISTS idx_history_stream ON stream_history(stream_id);
 CREATE INDEX IF NOT EXISTS idx_history_timestamp ON stream_history(timestamp DESC);
+
+CREATE TABLE IF NOT EXISTS summary_jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  stream_id TEXT NOT NULL,
+  stream_number TEXT NOT NULL,
+  stream_title TEXT NOT NULL,
+  stream_category TEXT NOT NULL,
+  stream_branch TEXT NOT NULL,
+  stream_worktree_path TEXT NOT NULL,
+  stream_created_at TEXT NOT NULL,
+  stream_completed_at TEXT,
+  user_summary TEXT NOT NULL,
+  history_file_path TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  max_attempts INTEGER NOT NULL DEFAULT 3,
+  error_message TEXT,
+  created_at TEXT NOT NULL,
+  started_at TEXT,
+  completed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_summary_jobs_status ON summary_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_summary_jobs_created ON summary_jobs(created_at DESC);

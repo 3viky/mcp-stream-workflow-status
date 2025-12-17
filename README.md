@@ -84,6 +84,82 @@ Add to `.claude/mcp-servers.json`:
 
 ---
 
+## Dashboard Launcher (Systemd Integration)
+
+**NEW**: Dashboard runs as a persistent systemd user service that survives agent session termination.
+
+### Quick Start
+
+```bash
+# Launch dashboard (auto-installs service if needed)
+node scripts/launch-dashboard.js
+
+# Or use the management script
+./scripts/manage-service.sh start
+```
+
+### How It Works
+
+1. **First run**: Installs systemd service to `~/.config/systemd/user/stream-dashboard.service`
+2. **Enables linger**: Auto-enables `loginctl enable-linger` so service persists beyond sessions
+3. **Standalone entry point**: Uses `api-server-standalone.js` (no stdio dependency, unlike MCP server)
+4. **Service management**: Uses `systemctl --user` commands to start/stop/restart
+5. **True persistence**: Service continues running after Claude Code exits, session ends, or logout
+6. **Browser launch**: Opens dashboard URL automatically
+7. **Multi-project**: Lock file tracks which project the server is running for
+
+> **Technical Note**: The service runs `dist/api-server-standalone.js` which provides ONLY the Express API server without MCP stdio transport. This ensures the process doesn't terminate when Claude Code closes. The main MCP server (`dist/server.js`) is used only when running via `.claude/mcp-servers.json`.
+
+### Service Management Commands
+
+```bash
+# Manual control via systemctl
+systemctl --user status stream-dashboard   # Check status
+systemctl --user stop stream-dashboard     # Stop service
+systemctl --user restart stream-dashboard  # Restart service
+systemctl --user enable stream-dashboard   # Auto-start on login
+
+# Or use the helper script
+./scripts/manage-service.sh status
+./scripts/manage-service.sh logs          # Follow logs
+./scripts/manage-service.sh install       # Reinstall service
+./scripts/manage-service.sh uninstall     # Remove service
+```
+
+### Benefits Over Direct Launch
+
+| Feature | Direct Launch | Systemd Service |
+|---------|--------------|-----------------|
+| **Survives agent exit** | ❌ No | ✅ Yes |
+| **Auto-restart on crash** | ❌ No | ✅ Yes |
+| **Journal logging** | ❌ No | ✅ Yes |
+| **Standard management** | ❌ Custom | ✅ systemctl |
+| **Auto-start on login** | ❌ No | ✅ Optional |
+
+### Troubleshooting
+
+**Service won't start:**
+```bash
+# Check logs
+journalctl --user -u stream-dashboard -n 50
+
+# Check status
+systemctl --user status stream-dashboard
+
+# Restart daemon
+systemctl --user daemon-reload
+./scripts/manage-service.sh restart
+```
+
+**Port conflict:**
+```bash
+# Server auto-discovers available port
+# Check lock file for actual port:
+cat ~/.local/share/claude/mcp/data/stream-workflow-status/projects/*/. api-server.lock
+```
+
+---
+
 ## MCP Tools
 
 | Tool | Description |

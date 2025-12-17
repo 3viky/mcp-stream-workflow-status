@@ -4,8 +4,10 @@
 
 import { Router, type Router as RouterType } from 'express';
 import { getDatabase } from '../../database/client.js';
-import { getAllStreams, getStream, updateStream, completeStream } from '../../database/queries/streams.js';
+import { getAllStreams, getStream, updateStream, completeStream, deleteStream } from '../../database/queries/streams.js';
 import { addHistoryEvent } from '../../database/queries/history.js';
+import { retireStream } from '../../services/retirement.js';
+import { config } from '../../config.js';
 import type { StreamStatus } from '../../types.js';
 
 export const streamsRouter: RouterType = Router();
@@ -141,12 +143,20 @@ streamsRouter.patch('/:id', (req, res) => {
 });
 
 /**
- * POST /api/streams/:id/archive - Quick archive endpoint
+ * POST /api/streams/:id/archive - Retire stream with full cleanup
+ *
+ * IMPORTANT: This DELETES the stream from the database after retirement.
+ * The only permanent record is the history file in .project/history/
  *
  * Path parameters:
  * - id: Stream identifier
+ *
+ * Body (optional):
+ * - summary: Completion summary for history report
+ * - deleteWorktree: Whether to delete worktree (default: true)
+ * - cleanupPlanFiles: Whether to cleanup plan files (default: true)
  */
-streamsRouter.post('/:id/archive', (req, res) => {
+streamsRouter.post('/:id/archive', async (req, res) => {
   try {
     const db = getDatabase();
     const stream = getStream(db, req.params.id);
@@ -157,49 +167,90 @@ streamsRouter.post('/:id/archive', (req, res) => {
 
     const previousStatus = stream.status;
 
-    if (previousStatus === 'archived') {
-      return res.json({ success: true, message: 'Stream already archived', stream });
+    // Only retire streams that are marked as completed
+    if (previousStatus !== 'completed') {
+      return res.status(400).json({
+        error: 'Cannot retire stream',
+        details: `Stream must be in 'completed' status before retirement. Current status: ${previousStatus}`,
+      });
     }
 
-    updateStream(db, req.params.id, { status: 'archived' });
+    const { summary = 'Stream completed and retired', deleteWorktree = true, cleanupPlanFiles = true } = req.body || {};
 
+    // Perform retirement with worktree cleanup
+    // Single retirement: queue intelligent summary generation job
+    const retirementResult = await retireStream(stream, summary, {
+      deleteWorktree,
+      cleanupPlanFiles,
+      queueIntelligentSummary: true,  // Queue job for intelligent summary
+      db,
+      projectRoot: config.PROJECT_ROOT,
+      worktreeRoot: config.WORKTREE_ROOT,
+    });
+
+    // Add final history event before deletion
     addHistoryEvent(db, {
       streamId: req.params.id,
-      eventType: 'status_changed',
+      eventType: 'completed',
       oldValue: previousStatus,
-      newValue: 'archived',
+      newValue: 'retired and deleted from database',
       timestamp: new Date().toISOString(),
     });
 
-    const updatedStream = getStream(db, req.params.id);
+    // DELETE the stream from the database
+    // The only record now is the history file in .project/history/
+    deleteStream(db, req.params.id);
 
+    // Return detailed retirement result
     res.json({
-      success: true,
-      message: `Stream ${req.params.id} archived`,
-      stream: updatedStream,
+      success: retirementResult.success,
+      message: retirementResult.success
+        ? `Stream ${req.params.id} retired and removed from database`
+        : `Stream ${req.params.id} retired with warnings and removed from database`,
+      streamId: req.params.id,
+      deleted: true,
+      retirement: {
+        worktreeDeleted: retirementResult.worktreeDeleted,
+        archiveWritten: retirementResult.archiveWritten,
+        planFilesCleanedUp: retirementResult.planFilesCleanedUp,
+        errors: retirementResult.errors,
+      },
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({ error: 'Failed to archive stream', details: errorMessage });
+    res.status(500).json({ error: 'Failed to retire stream', details: errorMessage });
   }
 });
 
 /**
- * POST /api/streams/archive-bulk - Archive multiple streams at once
+ * POST /api/streams/archive-bulk - Retire multiple streams at once
  *
  * Body:
- * - streamIds: Array of stream IDs to archive
+ * - streamIds: Array of stream IDs to retire
+ * - summary: Optional completion summary
+ * - deleteWorktree: Whether to delete worktrees (default: true)
+ * - cleanupPlanFiles: Whether to cleanup plan files (default: true)
  */
-streamsRouter.post('/archive-bulk', (req, res) => {
+streamsRouter.post('/archive-bulk', async (req, res) => {
   try {
-    const { streamIds } = req.body;
+    const { streamIds, summary = 'Bulk retirement', deleteWorktree = true, cleanupPlanFiles = true } = req.body;
 
     if (!Array.isArray(streamIds) || streamIds.length === 0) {
       return res.status(400).json({ error: 'streamIds must be a non-empty array' });
     }
 
     const db = getDatabase();
-    const results: { streamId: string; success: boolean; error?: string }[] = [];
+    const results: {
+      streamId: string;
+      success: boolean;
+      deleted?: boolean;
+      error?: string;
+      retirement?: {
+        worktreeDeleted: boolean;
+        archiveWritten: boolean;
+        planFilesCleanedUp: boolean;
+      };
+    }[] = [];
 
     for (const streamId of streamIds) {
       try {
@@ -211,21 +262,54 @@ streamsRouter.post('/archive-bulk', (req, res) => {
         }
 
         if (stream.status === 'archived') {
-          results.push({ streamId, success: true, error: 'Already archived' });
+          results.push({ streamId, success: true, error: 'Already retired' });
           continue;
         }
 
-        updateStream(db, streamId, { status: 'archived' });
+        // Only retire completed streams
+        if (stream.status !== 'completed') {
+          results.push({
+            streamId,
+            success: false,
+            error: `Cannot retire: status is '${stream.status}', must be 'completed'`,
+          });
+          continue;
+        }
 
+        // Perform retirement
+        // Bulk retirement: queue jobs but don't block
+        const retirementResult = await retireStream(stream, summary, {
+          deleteWorktree,
+          cleanupPlanFiles,
+          queueIntelligentSummary: true,  // Still queue jobs for bulk
+          db,
+          projectRoot: config.PROJECT_ROOT,
+          worktreeRoot: config.WORKTREE_ROOT,
+        });
+
+        // Add final history event before deletion
         addHistoryEvent(db, {
           streamId,
-          eventType: 'status_changed',
+          eventType: 'completed',
           oldValue: stream.status,
-          newValue: 'archived',
+          newValue: 'retired and deleted from database',
           timestamp: new Date().toISOString(),
         });
 
-        results.push({ streamId, success: true });
+        // DELETE the stream from database
+        deleteStream(db, streamId);
+
+        results.push({
+          streamId,
+          success: retirementResult.success,
+          deleted: true,
+          error: retirementResult.errors.length > 0 ? retirementResult.errors.join('; ') : undefined,
+          retirement: {
+            worktreeDeleted: retirementResult.worktreeDeleted,
+            archiveWritten: retirementResult.archiveWritten,
+            planFilesCleanedUp: retirementResult.planFilesCleanedUp,
+          },
+        });
       } catch (error) {
         results.push({
           streamId,
@@ -240,11 +324,11 @@ streamsRouter.post('/archive-bulk', (req, res) => {
 
     res.json({
       success: failCount === 0,
-      message: `Archived ${successCount} streams, ${failCount} failed`,
+      message: `Retired ${successCount} streams, ${failCount} failed`,
       results,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({ error: 'Failed to archive streams', details: errorMessage });
+    res.status(500).json({ error: 'Failed to retire streams', details: errorMessage });
   }
 });

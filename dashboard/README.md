@@ -154,7 +154,7 @@ product/apps/project-status/
 ├── src/
 │   ├── components/          # React components
 │   │   ├── StreamTable.tsx      # Main table (Active/Ready/Blocked)
-│   │   ├── CommitStream.tsx     # Recent commits from worktrees
+│   │   ├── ActivityTimeline.tsx  # Rich commit timeline with virtualization
 │   │   ├── QuickStats.tsx       # At-a-glance counters
 │   │   ├── FilterBar.tsx        # Filter controls
 │   │   ├── SearchBar.tsx        # Search input

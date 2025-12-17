@@ -2,8 +2,9 @@
  * Custom hook for fetching and managing statistics data
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { QuickStats } from '../types';
+import { useServerEvents } from './useServerEvents';
 
 // Dynamically detect API port from current window location
 const API_BASE = typeof window !== 'undefined'
@@ -29,7 +30,7 @@ export function useStats(): UseStatsResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -52,16 +53,15 @@ export function useStats(): UseStatsResult {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
+  // Initial fetch
   useEffect(() => {
     fetchStats();
+  }, [fetchStats]);
 
-    // Poll for updates every 20 seconds
-    const interval = setInterval(fetchStats, 20000);
-
-    return () => clearInterval(interval);
-  }, []);
+  // Subscribe to SSE updates (replaces polling)
+  useServerEvents('stats', fetchStats);
 
   return { stats, loading, error, refetch: fetchStats };
 }
