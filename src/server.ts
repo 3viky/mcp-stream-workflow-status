@@ -2,8 +2,9 @@
 /**
  * Stream Workflow Status MCP Server
  *
- * Provides real-time stream status tracking and dashboard
- * for development workflows.
+ * This is a THIN WRAPPER around @3viky/stream-workflow-status-dashboard.
+ * All business logic, database operations, and services are provided
+ * by the dashboard package. This file only provides MCP protocol adaptation.
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -14,16 +15,21 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 
 import { config, validateConfig } from './config.js';
-import { initializeDatabase } from './database/client.js';
-import { addStreamTool } from './tools/add-stream.js';
-import { updateStreamTool } from './tools/update-stream.js';
-import { addCommitTool } from './tools/add-commit.js';
-import { removeStreamTool } from './tools/remove-stream.js';
-import { getStreamStatsTool } from './tools/get-stream-stats.js';
-import { getVersionTool } from './tools/get-version.js';
-import { syncFromFilesTool } from './tools/sync-from-files.js';
-import { scanCommitsTool } from './scanners/git-commits.js';
-import { reconcileWorktreesTool } from './scanners/worktree-reconciliation.js';
+import { TOOL_DEFINITIONS } from './tools/definitions.js';
+import { handleToolCall } from './tools/handlers.js';
+
+// Import from dashboard package
+import {
+  initializeDatabase,
+  getDatabase,
+  getAllStreams,
+  syncFromFiles,
+  scanAllWorktreeCommits,
+  startApiServer,
+  startSummaryWorker,
+} from '@3viky/stream-workflow-status-dashboard';
+
+import type { ApiServerConfig } from '@3viky/stream-workflow-status-dashboard';
 
 // Validate configuration
 validateConfig();
@@ -31,18 +37,11 @@ validateConfig();
 // Initialize database
 initializeDatabase(config.DATABASE_PATH);
 
-// Import sync functions for auto-population
-import { syncFromFiles } from './tools/sync-from-files.js';
-import { scanAllWorktreeCommits } from './scanners/git-commits.js';
-import { getAllStreams } from './database/queries/streams.js';
-import { getTotalCommitsCount } from './database/queries/commits.js';
-import { getDatabase } from './database/client.js';
-
 // Create MCP server
 const server = new Server(
   {
     name: 'mcp-stream-workflow-status',
-    version: '0.2.0',
+    version: '0.3.0',
   },
   {
     capabilities: {
@@ -51,189 +50,17 @@ const server = new Server(
   }
 );
 
-// Register tool handlers
+// Register tool list handler
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
-      {
-        name: 'add_stream',
-        description: 'Register new stream in status database',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            streamId: { type: 'string', description: 'Unique stream identifier' },
-            streamNumber: { type: 'string', description: 'Stream number (e.g., "0101")' },
-            title: { type: 'string', description: 'Stream title' },
-            category: {
-              type: 'string',
-              enum: ['frontend', 'backend', 'infrastructure', 'testing', 'documentation', 'refactoring'],
-              description: 'Stream category',
-            },
-            priority: {
-              type: 'string',
-              enum: ['critical', 'high', 'medium', 'low'],
-              description: 'Stream priority',
-            },
-            worktreePath: { type: 'string', description: 'Path to worktree' },
-            branch: { type: 'string', description: 'Git branch name' },
-            estimatedPhases: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Optional array of phase names',
-            },
-          },
-          required: ['streamId', 'streamNumber', 'title', 'category', 'priority', 'worktreePath', 'branch'],
-        },
-      },
-      {
-        name: 'update_stream',
-        description: 'Update stream status, progress, or metadata',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            streamId: { type: 'string', description: 'Stream identifier' },
-            status: {
-              type: 'string',
-              enum: ['initializing', 'active', 'blocked', 'paused', 'completed', 'archived'],
-              description: 'New status',
-            },
-            progress: {
-              type: 'number',
-              minimum: 0,
-              maximum: 100,
-              description: 'Progress percentage (0-100)',
-            },
-            currentPhase: {
-              type: 'number',
-              description: 'Index of current phase',
-            },
-            blockedBy: {
-              type: 'string',
-              description: 'Stream ID blocking this stream',
-            },
-          },
-          required: ['streamId'],
-        },
-      },
-      {
-        name: 'add_commit',
-        description: 'Track commit made in worktree',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            streamId: { type: 'string', description: 'Stream identifier' },
-            commitHash: { type: 'string', description: 'Git commit hash' },
-            message: { type: 'string', description: 'Commit message' },
-            author: { type: 'string', description: 'Commit author' },
-            filesChanged: { type: 'number', description: 'Number of files changed' },
-            timestamp: { type: 'string', description: 'ISO 8601 timestamp (optional)' },
-          },
-          required: ['streamId', 'commitHash', 'message', 'author', 'filesChanged'],
-        },
-      },
-      {
-        name: 'remove_stream',
-        description: 'Archive completed stream',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            streamId: { type: 'string', description: 'Stream identifier' },
-            completionSummary: { type: 'string', description: 'Optional completion summary' },
-          },
-          required: ['streamId'],
-        },
-      },
-      {
-        name: 'get_stream_stats',
-        description: 'Get quick dashboard statistics',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'get_version',
-        description: 'Get service version information',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'sync_from_files',
-        description: 'Sync streams from .project/plan/streams/ directory into database (auto-runs on first startup)',
-        inputSchema: {
-          type: 'object',
-          properties: {},
-        },
-      },
-      {
-        name: 'scan_commits',
-        description: 'Scan git commits from worktrees and populate commits table (for stream activity tracking)',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            streamId: {
-              type: 'string',
-              description: 'Optional: scan specific stream only (otherwise scans all streams)',
-            },
-          },
-        },
-      },
-      {
-        name: 'reconcile_worktrees',
-        description: 'Reconcile database with actual git worktrees. Identifies stale entries (no worktree), completed streams (merged to main), and orphaned worktrees (no DB entry).',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            dryRun: {
-              type: 'boolean',
-              default: true,
-              description: 'Only report differences, do not update database (default: true)',
-            },
-            autoArchiveStale: {
-              type: 'boolean',
-              default: false,
-              description: 'Automatically mark stale streams (no worktree) as archived (default: false)',
-            },
-            autoAddOrphaned: {
-              type: 'boolean',
-              default: false,
-              description: 'Automatically add orphaned worktrees to database (default: false)',
-            },
-          },
-        },
-      },
-    ],
-  };
+  return { tools: TOOL_DEFINITIONS };
 });
 
+// Register tool call handler
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
-    switch (name) {
-      case 'add_stream':
-        return await addStreamTool(args);
-      case 'update_stream':
-        return await updateStreamTool(args);
-      case 'add_commit':
-        return await addCommitTool(args);
-      case 'remove_stream':
-        return await removeStreamTool(args);
-      case 'get_stream_stats':
-        return await getStreamStatsTool();
-      case 'get_version':
-        return await getVersionTool();
-      case 'sync_from_files':
-        return await syncFromFilesTool();
-      case 'scan_commits':
-        return await scanCommitsTool(args);
-      case 'reconcile_worktrees':
-        return await reconcileWorktreesTool(args);
-      default:
-        throw new Error(`Unknown tool: ${name}`);
-    }
+    return await handleToolCall(name, args);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     return {
@@ -248,38 +75,29 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
-// Import and start API server if enabled
-import { startApiServer } from './api/server.js';
-
-// Import background worker
-import { startWorker } from './jobs/summary-worker.js';
-
 // Start server
 async function main() {
+  const db = getDatabase();
+
   // Auto-sync from .project/plan/streams/ if database is empty
   try {
-    const db = getDatabase();
     let streamCount = getAllStreams(db).length;
-    let commitCount = getTotalCommitsCount(db);
 
-    // Sync streams from filesystem if database is empty
     if (streamCount === 0) {
       console.error('[MCP] Database empty, auto-syncing from .project/plan/streams/...');
-      const result = await syncFromFiles();
-      console.error(`[MCP] Auto-sync complete: ${result.synced} streams synced`);
-
-      // Re-query after sync
-      streamCount = getAllStreams(db).length;
+      const result = await syncFromFiles(db, config.PROJECT_ROOT, config.WORKTREE_ROOT);
+      console.error(`[MCP] Auto-sync complete: ${result.added} streams synced`);
+      streamCount = result.added;
     }
 
-    // Auto-scan commits asynchronously (don't block server startup)
-    if (streamCount > 0 && commitCount === 0) {
-      console.error('[MCP] Scheduling background commit scan (last 50 commits or 7 days per stream)...');
-      // Run in background after server is up
+    // Auto-scan commits asynchronously
+    if (streamCount > 0) {
       setImmediate(async () => {
         try {
-          const commitResult = await scanAllWorktreeCommits();
-          console.error(`[MCP] Background scan complete: ${commitResult.commitsAdded} commits from ${commitResult.scanned} streams (${commitResult.errors} errors)`);
+          const commitResult = await scanAllWorktreeCommits(db, config.PROJECT_ROOT);
+          console.error(
+            `[MCP] Background scan: ${commitResult.commitsAdded} commits from ${commitResult.scanned} streams`
+          );
         } catch (error) {
           console.error('[MCP] Background commit scan failed:', error);
         }
@@ -289,27 +107,32 @@ async function main() {
     console.error('[MCP] Auto-initialization failed (non-fatal):', error);
   }
 
-  // Start API server for dashboard (enabled by default)
-  // Set API_ENABLED=false to explicitly disable
+  // Start API server for dashboard if enabled
   if (config.API_ENABLED) {
     try {
-      const serverInfo = await startApiServer();
-      console.error(`[MCP] API server ${serverInfo.existing ? 'discovered' : 'started'} on port ${serverInfo.port}`);
+      const apiConfig: ApiServerConfig = {
+        projectRoot: config.PROJECT_ROOT,
+        projectName: config.PROJECT_NAME,
+        worktreeRoot: config.WORKTREE_ROOT,
+        lockFilePath: config.LOCK_FILE_PATH,
+        databasePath: config.DATABASE_PATH,
+        port: config.API_PORT,
+      };
+
+      const serverInfo = await startApiServer(db, apiConfig);
+      console.error(
+        `[MCP] API server ${serverInfo.existing ? 'discovered' : 'started'} on port ${serverInfo.port}`
+      );
       console.error(`[MCP] Dashboard: http://localhost:${serverInfo.port}/`);
     } catch (error) {
       console.error('[MCP] Failed to start API server:', error);
-      console.error('[MCP] Continuing with MCP tools only (set API_ENABLED=false to silence this)');
     }
-  } else {
-    console.error('[MCP] API server disabled (API_ENABLED=false)');
   }
 
   // Start background worker for intelligent summary generation
-  // Runs asynchronously in the background, polling every 10 seconds
   setImmediate(() => {
-    startWorker(config.PROJECT_ROOT, 10000).catch((error) => {
+    startSummaryWorker(config.PROJECT_ROOT, 10000).catch((error) => {
       console.error('[MCP] Background worker crashed:', error);
-      // Worker has its own error handling and continues running
     });
   });
 
