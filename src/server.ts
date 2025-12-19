@@ -86,8 +86,8 @@ async function main() {
     if (streamCount === 0) {
       console.error('[MCP] Database empty, auto-syncing from .project/plan/streams/...');
       const result = await syncFromFiles(db, config.PROJECT_ROOT, config.WORKTREE_ROOT);
-      console.error(`[MCP] Auto-sync complete: ${result.added} streams synced`);
-      streamCount = result.added;
+      console.error(`[MCP] Auto-sync complete: ${result.synced} streams synced`);
+      streamCount = result.synced;
     }
 
     // Auto-scan commits asynchronously
@@ -131,7 +131,7 @@ async function main() {
 
   // Start background worker for intelligent summary generation
   setImmediate(() => {
-    startSummaryWorker(config.PROJECT_ROOT, 10000).catch((error) => {
+    startSummaryWorker(db, config.PROJECT_ROOT, 10000).catch((error) => {
       console.error('[MCP] Background worker crashed:', error);
     });
   });

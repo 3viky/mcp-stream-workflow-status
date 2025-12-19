@@ -7,6 +7,7 @@
  */
 
 import { z } from 'zod';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { config } from '../config.js';
 import type { ToolName } from './definitions.js';
 
@@ -23,7 +24,7 @@ import {
   addHistoryEvent,
   syncFromFiles,
   scanAllWorktreeCommits,
-  scanStreamWorktree,
+  scanStreamCommits,
   reconcileWorktrees,
 } from '@3viky/stream-workflow-status-dashboard';
 
@@ -85,16 +86,11 @@ const reconcileSchema = z.object({
 // MCP Response Helpers
 // ============================================================================
 
-interface McpResponse {
-  content: Array<{ type: 'text'; text: string }>;
-  isError?: boolean;
-}
-
-function success(message: string): McpResponse {
+function success(message: string): CallToolResult {
   return { content: [{ type: 'text', text: message }] };
 }
 
-function json(data: unknown, prefix?: string): McpResponse {
+function json(data: unknown, prefix?: string): CallToolResult {
   const text = prefix
     ? `${prefix}\n\n${JSON.stringify(data, null, 2)}`
     : JSON.stringify(data, null, 2);
@@ -105,7 +101,7 @@ function json(data: unknown, prefix?: string): McpResponse {
 // Tool Handler Implementation
 // ============================================================================
 
-export async function handleToolCall(name: string, args: unknown): Promise<McpResponse> {
+export async function handleToolCall(name: string, args: unknown): Promise<CallToolResult> {
   const db = getDatabase();
 
   switch (name as ToolName) {
@@ -250,8 +246,8 @@ export async function handleToolCall(name: string, args: unknown): Promise<McpRe
         if (!stream) {
           throw new Error(`Stream not found: ${validated.streamId}`);
         }
-        const result = await scanStreamWorktree(db, stream);
-        return json(result, `📝 Scanned commits for ${validated.streamId}`);
+        const commitsAdded = await scanStreamCommits(db, validated.streamId);
+        return json({ commitsAdded, streamId: validated.streamId }, `📝 Scanned commits for ${validated.streamId}`);
       }
 
       const result = await scanAllWorktreeCommits(db, config.PROJECT_ROOT);
