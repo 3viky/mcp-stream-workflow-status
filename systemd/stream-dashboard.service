@@ -1,0 +1,22 @@
+[Unit]
+Description=Stream Workflow Status Dashboard
+Documentation=https://github.com/3viky/mcp-suite
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Code/packages/src/@mcp/mcp-stream-workflow-status
+ExecStart=/usr/bin/node %h/Code/packages/src/@mcp/mcp-stream-workflow-status/dist/api-server-standalone.js
+Environment="API_ENABLED=true"
+Environment="NODE_ENV=production"
+# PROJECT_ROOT will be set dynamically by the launcher
+StandardOutput=journal
+StandardError=journal
+Restart=on-failure
+RestartSec=5s
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=10s
+
+[Install]
+WantedBy=default.target

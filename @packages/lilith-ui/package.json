@@ -1,0 +1,62 @@
+{
+  "name": "@transftw/lilith-ui",
+  "version": "1.0.0",
+  "description": "Unified theme-agnostic UI component library for egirl-platform",
+  "type": "module",
+  "author": "Victoria Lackey <VictoriaLackey@pm.me>",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./core": "./src/components/primitives/index.ts",
+    "./layout": "./src/components/layout/index.ts",
+    "./typography": "./src/components/typography/index.ts",
+    "./navigation": "./src/components/navigation/index.ts",
+    "./feedback": "./src/components/feedback/index.ts",
+    "./data": "./src/components/data/index.ts",
+    "./animated": "./src/components/animated/index.ts",
+    "./admin": "./src/components/admin/index.ts",
+    "./analytics": "./src/components/analytics/index.ts",
+    "./creator": "./src/components/creator/index.ts",
+    "./forms": "./src/components/forms/index.ts",
+    "./realtime": "./src/components/realtime/index.ts",
+    "./messaging": "./src/components/messaging/index.ts",
+    "./hooks": "./src/hooks/index.ts",
+    "./themes/luxe": "./src/themes/luxe/index.ts"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "type-check": "tsc --noEmit",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint 'src/**/*.{ts,tsx}' --ignore-pattern '*.stories.*'"
+  },
+  "dependencies": {
+    "@transftw/theme-provider": "workspace:*",
+    "lucide-react": "^0.553.0",
+    "react": "^18.3.1",
+    "styled-components": "^6.1.8"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "styled-components": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.7.3"
+  },
+  "keywords": [
+    "react",
+    "ui",
+    "components",
+    "design-system",
+    "theme",
+    "luxe",
+    "cyberpunk"
+  ]
+}

@@ -1,0 +1,61 @@
+{
+  "name": "@3viky/mcp-stream-workflow-status",
+  "version": "0.3.0",
+  "description": "MCP protocol adapter for stream workflow status (thin wrapper around @3viky/stream-workflow-status-dashboard)",
+  "type": "module",
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/server.js",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "lint": "eslint src/**/*.ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "stream-status",
+    "dashboard",
+    "sqlite",
+    "real-time"
+  ],
+  "author": "Victoria Lackey <VictoriaLackey@pm.me>",
+  "license": "MIT",
+  "dependencies": {
+    "@3viky/mcp-common": "workspace:*",
+    "@3viky/stream-workflow-status-dashboard": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.24.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.2",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "@vitest/coverage-v8": "^2.1.5",
+    "eslint": "^9.15.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.5"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/3viky/mcp-stream-workflow-status.git"
+  },
+  "bugs": {
+    "url": "https://github.com/3viky/mcp-stream-workflow-status/issues"
+  },
+  "homepage": "https://github.com/3viky/mcp-stream-workflow-status#readme"
+}

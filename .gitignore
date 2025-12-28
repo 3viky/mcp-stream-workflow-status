@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+dashboard/dist/
+dashboard/node_modules/
+
+# SQLite databases (never commit)
+# IMPORTANT: Use /data/ (with leading slash) to only ignore root-level data directory
+# DO NOT use data/ (without slash) as it ignores ALL data directories including source code!
+/data/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Testing
+coverage/
+.nyc_output/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Temp
+*.tmp
+*.temp
+.cache/
