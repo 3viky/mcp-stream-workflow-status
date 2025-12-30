@@ -1,0 +1,135 @@
+stages:
+  - build
+  - publish
+
+variables:
+  GITLAB_NPM_REGISTRY: "https://gitlab.com/api/v4/packages/npm"
+  GITLAB_PROJECT_REGISTRY: "https://gitlab.com/api/v4/projects/${CI_PROJECT_ID}/packages/npm"
+
+.setup-npm: &setup-npm
+  - corepack enable pnpm
+  # Configure scoped registry for @transquinnftw packages (read from group registry)
+  - echo "@transquinnftw:registry=${GITLAB_NPM_REGISTRY}/" > .npmrc
+  - echo "//${GITLAB_NPM_REGISTRY#https://}/:_authToken=${CI_JOB_TOKEN}" >> .npmrc
+  # Remove prepare script to avoid git issues in CI (must be before pnpm install)
+  - |
+    node -e "
+      const fs = require('fs');
+      const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+      if (pkg.scripts?.prepare) {
+        delete pkg.scripts.prepare;
+        fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+        console.log('Removed prepare script');
+      }
+    "
+  # Transform workspace:* to latest versions from registry before install
+  - |
+    if grep -q '"workspace:\*"' package.json 2>/dev/null; then
+      echo "Transforming workspace:* dependencies..."
+      node -e "
+        const fs = require('fs');
+        const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+        const transform = (deps) => {
+          if (!deps) return deps;
+          for (const [name, version] of Object.entries(deps)) {
+            if (version === 'workspace:*' || version.startsWith('workspace:')) {
+              deps[name] = '*';  // Accept any version from registry
+            }
+          }
+          return deps;
+        };
+        pkg.dependencies = transform(pkg.dependencies);
+        pkg.devDependencies = transform(pkg.devDependencies);
+        pkg.peerDependencies = transform(pkg.peerDependencies);
+        fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+        console.log('Transformed workspace dependencies');
+      "
+    fi
+
+build:
+  stage: build
+  image: node:20-alpine
+  before_script:
+    - apk add --no-cache jq
+    - *setup-npm
+  script:
+    - pnpm install
+    - pnpm run build
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 hour
+
+publish:
+  stage: publish
+  image: node:20-alpine
+  needs: ["build"]
+  before_script:
+    - apk add --no-cache jq curl
+    - corepack enable pnpm
+  script:
+    # Configure for publishing to project-specific registry
+    - echo "@transquinnftw:registry=${GITLAB_PROJECT_REGISTRY}/" > .npmrc
+    - echo "//${GITLAB_PROJECT_REGISTRY#https://}/:_authToken=${CI_JOB_TOKEN}" >> .npmrc
+    # Get current version to check if already published
+    - export PKG_NAME=$(jq -r '.name' package.json)
+    - export PKG_VERSION=$(jq -r '.version' package.json)
+    - |
+      echo "Checking if ${PKG_NAME}@${PKG_VERSION} exists..."
+      # Query the npm registry for the package version
+      HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+        --header "Authorization: Bearer ${CI_JOB_TOKEN}" \
+        "${GITLAB_NPM_REGISTRY}/${PKG_NAME}" || echo "000")
+      if [ "$HTTP_STATUS" = "200" ]; then
+        # Check if this specific version exists
+        VERSION_EXISTS=$(curl -s --header "Authorization: Bearer ${CI_JOB_TOKEN}" \
+          "${GITLAB_NPM_REGISTRY}/${PKG_NAME}" | jq -r ".versions[\"${PKG_VERSION}\"] // empty")
+        if [ -n "$VERSION_EXISTS" ]; then
+          echo "Version ${PKG_VERSION} already published, skipping"
+          exit 0
+        fi
+      fi
+      echo "Version ${PKG_VERSION} not found, will publish"
+    # Restore original package.json for correct version in published package
+    - git checkout package.json 2>/dev/null || true
+    # Transform workspace:* to caret ranges for publishing
+    - |
+      node -e "
+        const fs = require('fs');
+        const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+        const transform = (deps) => {
+          if (!deps) return deps;
+          for (const [name, version] of Object.entries(deps)) {
+            if (version === 'workspace:*' || version.startsWith('workspace:')) {
+              deps[name] = '*';  // npm/pnpm will resolve to latest
+            }
+          }
+          return deps;
+        };
+        pkg.dependencies = transform(pkg.dependencies);
+        pkg.devDependencies = transform(pkg.devDependencies);
+        pkg.peerDependencies = transform(pkg.peerDependencies);
+        // Remove publishConfig if it has unresolved variables or placeholders
+        const registry = pkg.publishConfig?.['@transquinnftw:registry'] || '';
+        if (registry.includes('\${') || registry.includes('YOUR_PROJECT_ID')) {
+          delete pkg.publishConfig;
+        }
+        // Remove private flag to allow publishing
+        delete pkg.private;
+        // Remove lifecycle scripts that cause issues in CI
+        if (pkg.scripts) {
+          delete pkg.scripts.prepare;
+          delete pkg.scripts.prepublish;
+          delete pkg.scripts.prepublishOnly;
+          delete pkg.scripts.prepack;
+          if (Object.keys(pkg.scripts).length === 0) {
+            delete pkg.scripts;
+          }
+        }
+        fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+      "
+    - pnpm publish --no-git-checks --ignore-scripts
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"

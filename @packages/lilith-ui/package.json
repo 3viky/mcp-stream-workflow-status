@@ -58,5 +58,10 @@
     "theme",
     "luxe",
     "cyberpunk"
-  ]
+  ],
+  "_": {
+    "registry": "gitlab",
+    "publish": false,
+    "build": true
+  }
 }
